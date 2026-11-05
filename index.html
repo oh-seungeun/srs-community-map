@@ -483,7 +483,8 @@
     const parentOf = new Map(); const extUsed = new Map();
     L.edges.filter((e) => e.primary && visId.has(e.t)).forEach((e) => {
       if (e.m !== null && e.m !== undefined) { if (visId.has(e.m)) parentOf.set('n' + e.t, 'n' + e.m); }
-      else if (e.mext) { const k = 'x' + e.mext; if (!items.has(k)) items.set(k, { key: k, ext: e.mext, name: (extByName.get(e.mext) || {}).name || e.mext, year: 9999, trainees: 0 }); const it = items.get(k); it.year = Math.min(it.year, (e.y0 || it.year) - 2); it.trainees++; parentOf.set('n' + e.t, k); }
+      else if (e.mext) { const k = 'x' + e.mext; if (!items.has(k)) items.set(k, { key: k, ext: e.mext, name: (extByName.get(e.mext) || {}).name || e.mext, year: 9999, trainees: 0 }); const it = items.get(k);
+        const tn = byId.get(e.t); const guess = e.y0 ? e.y0 - 2 : ((tn && (tn.ind || tn.y0)) ? (tn.ind || tn.y0) - 5 : 9999); it.year = Math.min(it.year, guess); it.trainees++; parentOf.set('n' + e.t, k); }
     });
     const rows = [{ id: 'root', parentId: null }, ...[...items.values()].map((it) => ({ id: it.key, parentId: parentOf.get(it.key) || 'root', it }))];
     let root; try { root = d3.stratify().id((r) => r.id).parentId((r) => r.parentId)(rows); } catch (e) { root = d3.stratify().id((r) => r.id).parentId((r) => r.id === 'root' ? null : 'root')(rows); }
@@ -491,22 +492,22 @@
     const leaves = root.leaves().length, ROW = 15, TOP = 34, LEFT = 24, RIGHT = 170;
     const H = TOP + Math.max(300, leaves * ROW) + 20;
     d3.tree().size([H - TOP - 20, 1])(root);
-    const yrs = [...items.values()].map((it) => it.year).filter((y) => y && y < 9999);
-    const x = d3.scaleLinear().domain([Math.min(2004, d3.min(yrs) || 2007), (d3.max(yrs) || 2026) + 1]).range([LEFT, W - RIGHT]);
+    const yrs = [...items.values()].map((it) => it.year).filter((y) => y && y < 9999 && y > 1900);
+    const x = d3.scaleLinear().domain([Math.max(1990, Math.min(2004, d3.min(yrs) || 2007)), Math.min(2027, (d3.max(yrs) || 2026) + 1)]).range([LEFT, W - RIGHT]);
     svgN.attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
     const ax = svgN.append('g');
     d3.range(Math.ceil(x.domain()[0]), Math.floor(x.domain()[1]) + 1).forEach((yr) => {
       ax.append('line').attr('x1', x(yr)).attr('x2', x(yr)).attr('y1', TOP - 8).attr('y2', H - 10).attr('stroke', css('--line')).attr('stroke-width', yr % 5 === 0 ? 1 : 0.4);
       if (yr % 2 === 0) ax.append('text').text(yr).attr('x', x(yr)).attr('y', 18).attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', css('--font-mono')).attr('fill', css('--muted'));
     });
-    svgN.append('text').text('← year of first last-author paper (independence); external mentors in grey; dashed = second mentor').attr('x', LEFT).attr('y', H - 2).attr('font-size', 10).attr('fill', css('--muted'));
+    svgN.append('text').text('← year of first sustained last-author activity (independence); grey = mentor outside the map; dashed = secondary mentor; sources: Academic Family Tree (CC-BY) + first-author papers').attr('x', LEFT).attr('y', H - 2).attr('font-size', 10).attr('fill', css('--muted'));
     const pos = new Map(); root.descendants().forEach((dn) => { if (dn.data.it) pos.set(dn.data.it.key, [x(Math.min(Math.max(dn.data.it.year || x.domain()[0], x.domain()[0]), x.domain()[1])), TOP + dn.x]); });
     const link = d3.linkHorizontal().x((p) => p[0]).y((p) => p[1]);
     const g = svgN.append('g');
     L.edges.filter((e) => visId.has(e.t)).forEach((e) => {
       const a = pos.get('n' + e.t), bk = e.m !== null && e.m !== undefined ? 'n' + e.m : 'x' + e.mext, b = pos.get(bk); if (!a || !b) return;
       const hl = selected && (selected.id === e.t || selected.id === e.m);
-      g.append('path').attr('d', link({ source: b, target: a })).attr('fill', 'none').attr('stroke', hl ? css('--accent') : css('--edge')).attr('stroke-width', e.primary ? 1.2 + 0.25 * Math.min(e.n, 8) : 1).attr('stroke-dasharray', e.primary ? null : '4 3').attr('opacity', !selected ? 0.8 : hl ? 1 : 0.25);
+      g.append('path').attr('d', link({ source: b, target: a })).attr('fill', 'none').attr('stroke', hl ? css('--accent') : css('--edge')).attr('stroke-width', e.primary ? (e.src && e.src.includes('aft') ? 2 : 1.2 + 0.25 * Math.min(e.n, 8)) : 1).attr('stroke-dasharray', e.primary ? null : '4 3').attr('opacity', !selected ? 0.8 : hl ? 1 : 0.25);
     });
     const nb = selected ? new Set([...lineageOf(selected.id).mentors.map((e) => e.m), ...lineageOf(selected.id).trainees.map((e) => e.t)]) : null;
     const gn = svgN.append('g');
@@ -541,7 +542,7 @@
       <h3>Subjects</h3><div class="chips">${bySubj.map(([id, k]) => `<span class="chip ${id ? subjGroup.get(id) : ''}">${esc(sName(id))} <span class="num">${k}</span></span>`).join('')}</div>
       ${(() => { const li = lineageOf(n.id); if (!D.lineage) return ''; const name = (e) => e.m !== null && e.m !== undefined ? esc((byId.get(e.m) || {}).name || '') : `<i>${esc(((D.lineage.ext || []).find((x) => x.name === e.mext) || {}).name || e.mext)}</i>`;
         return `<h3>Lineage</h3><p class="meta">independent since <span class="num">${n.ind || '?'}</span></p>` +
-          (li.mentors.length ? `<p>Trained in: ${li.mentors.map((e) => `<span class="chip" ${e.m !== null && e.m !== undefined ? `data-id="${e.m}"` : ''}>${name(e)} <span class="num">${e.n}</span>${e.primary ? '' : ' (2nd)'}</span>`).join(' ')}</p>` : '<p class="meta">no mentor found in the sources (root)</p>') +
+          (li.mentors.length ? `<p>Trained in: ${li.mentors.map((e) => `<span class="chip" ${e.m !== null && e.m !== undefined ? `data-id="${e.m}"` : ''} title="${esc(e.src === 'aft' ? 'Academic Family Tree' : e.src === 'pub' ? 'inferred from first-author papers' : 'Academic Family Tree + papers')}">${name(e)} <span class="meta">${esc(e.rel || '')}${e.n ? ` · ${e.n} papers` : ''}${e.src && e.src.includes('aft') ? ' · AFT' : ''}</span>${e.primary ? '' : ' (2nd)'}</span>`).join(' ')}</p>` : '<p class="meta">no mentor found in the sources (root)</p>') +
           (li.trainees.length ? `<p>Trained: ${li.trainees.map((e) => `<span class="chip" data-id="${e.t}">${esc((byId.get(e.t) || {}).name || '')} <span class="num">${e.n}</span></span>`).join(' ')}</p>` : '') +
           (li.mentors.length && li.mentors[0].papers.length ? `<p class="note">evidence: ${li.mentors[0].papers.slice(0, 3).map(esc).join(' · ')}</p>` : ''); })()}
       <h3>Collaborators (shared papers)</h3><div class="chips">${nb.length ? nb.map(([id, w]) => `<span class="chip" data-id="${id}">${esc(byId.get(id).name)} <span class="num">${w}</span></span>`).join('') : '<span class="meta">none in this set</span>'}</div>
