@@ -50,7 +50,7 @@
   #graph.subjects { overflow-y: auto; }
   svg { width: 100%; height: 100%; display: block; touch-action: none; }
   #svgLabs { cursor: grab; } #svgLabs:active { cursor: grabbing; }
-  #svgSubj { height: auto; touch-action: auto; }
+  #svgSubj, #svgLin { height: auto; touch-action: auto; }
   #svgGeo { cursor: grab; } #svgGeo:active { cursor: grabbing; }
   .legend { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 10px; font-size: 11.5px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; pointer-events: none; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
@@ -104,6 +104,7 @@
     <button type="button" data-view="labs" aria-pressed="true">Labs</button>
     <button type="button" data-view="subjects" aria-pressed="false">Subjects</button>
     <button type="button" data-view="geo" aria-pressed="false">Geo</button>
+    <button type="button" data-view="lineage" aria-pressed="false">Lineage</button>
   </div>
   <div class="ctl">
     <label for="q">PI <input id="q" type="search" placeholder="name" list="names" autocomplete="off"></label>
@@ -132,6 +133,7 @@
     <svg id="svgLabs" role="img" aria-label="Force-directed map of SRS microscopy principal investigators"></svg>
     <svg id="svgSubj" role="img" aria-label="Papers arranged by subject and year" hidden></svg>
     <svg id="svgGeo" role="img" aria-label="PIs placed on a world map by institution" hidden></svg>
+    <svg id="svgLin" role="img" aria-label="Academic lineage tree of SRS PIs" hidden></svg>
     <div id="status">loading data…</div>
     <div class="tip" id="tip"></div>
     <div id="filters" hidden>
@@ -156,7 +158,7 @@
   <aside id="panel">
     <h2>How to read this map</h2>
     <p class="meta">Each node is a principal investigator with at least three last-author papers (slider: down to one) in the SRS / coherent-Raman microscopy literature since 2007, from OpenAlex. Conference abstracts and data stubs are hidden unless you tick the box, and the Filters panel hides unrelated fields such as structural vibration or pollution by default. Lines connect PIs who share papers. Nearby nodes collaborate often.</p>
-    <p class="meta">Click a PI to unwind their papers into a chronological string of beads around the node. Click a bead for the paper. Switch to <b>Subjects</b> to see every paper as a bead on a shelf per subject, by year.</p>
+    <p class="meta">Click a PI to unwind their papers into a chronological string of beads around the node. Click a bead for the paper. Switch to <b>Subjects</b> for papers as beads on a shelf per subject, <b>Geo</b> for the world map, and <b>Lineage</b> for who trained in whose lab.</p>
   </aside>
 </main>
 
@@ -166,7 +168,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const tip = $('tip'), panel = $('panel'), status = $('status'), sub = $('sub'), graph = $('graph');
-  const svgL = d3.select('#svgLabs'), svgS = d3.select('#svgSubj'), svgG = d3.select('#svgGeo');
+  const svgL = d3.select('#svgLabs'), svgS = d3.select('#svgSubj'), svgG = d3.select('#svgGeo'), svgN = d3.select('#svgLin');
   let world = null; fetch('world.json').then((r) => r.ok ? r.json() : null).then((w) => { world = w; if (view === 'geo') buildGeo(); }).catch(() => {});
   const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -199,7 +201,7 @@
     (d.subjects.applications || []).forEach((t) => { subj.set(t.id, t); subjGroup.set(t.id, 'appl'); });
     sub.textContent = `${d.nodes.length} PIs · ${d.papers.length} papers · ${d.n_works_total} works searched · built ${d.built}`;
     const dl = $('names'); d.nodes.forEach((n) => { const o = document.createElement('option'); o.value = n.name; dl.appendChild(o); });
-    buildLabs(); setView(['subjects', 'geo'].includes((location.hash || '#labs').slice(1)) ? location.hash.slice(1) : 'labs', false);
+    buildLabs(); setView(['subjects', 'geo', 'lineage'].includes((location.hash || '#labs').slice(1)) ? location.hash.slice(1) : 'labs', false);
     connectStore();
   }).catch((e) => { status.textContent = 'Could not load the data: ' + e.message; });
 
@@ -234,11 +236,11 @@
     document.querySelectorAll('.seg button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
     // SVG elements have no `hidden` property, so toggle the attribute (the page CSS hides [hidden])
     const showSvg = (id, on) => { const el = $(id); if (on) el.removeAttribute('hidden'); else el.setAttribute('hidden', ''); };
-    showSvg('svgLabs', v === 'labs'); showSvg('svgSubj', v === 'subjects'); showSvg('svgGeo', v === 'geo'); $('legendLabs').hidden = v === 'subjects';
-    $('labsCtl').hidden = v !== 'labs'; $('subjCtl').hidden = v !== 'subjects'; $('geoCtl').hidden = v !== 'geo'; graph.classList.toggle('subjects', v === 'subjects');
-    if (v === 'subjects') buildSubjects(); else if (v === 'geo') buildGeo(); else { applyEmphasis(); if (selected) drawString(selected); }
+    showSvg('svgLabs', v === 'labs'); showSvg('svgSubj', v === 'subjects'); showSvg('svgGeo', v === 'geo'); showSvg('svgLin', v === 'lineage'); $('legendLabs').hidden = v === 'subjects';
+    $('labsCtl').hidden = v !== 'labs' && v !== 'lineage'; $('subjCtl').hidden = v !== 'subjects'; $('geoCtl').hidden = v !== 'geo'; graph.classList.toggle('subjects', v === 'subjects' || v === 'lineage');
+    if (v === 'subjects') buildSubjects(); else if (v === 'geo') buildGeo(); else if (v === 'lineage') buildLineage(); else { applyEmphasis(); if (selected) drawString(selected); }
   }
-  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['labs', 'subjects', 'geo'].includes(v) && v !== view) setView(v, false); });
+  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['labs', 'subjects', 'geo', 'lineage'].includes(v) && v !== view) setView(v, false); });
   document.querySelectorAll('.seg button[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 
   // ======================================================= LABS VIEW
@@ -336,6 +338,7 @@
     applyEmphasis();
     if (view === 'subjects') { buildSubjects(); }
     if (view === 'geo') { buildGeo(); }
+    if (view === 'lineage') { buildLineage(); }
     if (!n) { panel.innerHTML = '<h2>How to read this map</h2><p class="meta">Click a PI to unwind their papers into a chronological string of beads. Click a bead for the paper. In the Subjects view, pick a PI to highlight their beads on every shelf.</p>'; return; }
     if (view === 'labs') {
       drawString(n);
@@ -467,6 +470,65 @@
   document.querySelectorAll('[data-proj]').forEach((b) => b.addEventListener('click', () => { proj = b.dataset.proj; document.querySelectorAll('[data-proj]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); geoZoom = 1; geoPan = [0, 0]; buildGeo(); }));
   $('arcs').addEventListener('change', (e) => { showArcs = e.target.checked; buildGeo(); });
 
+  // ======================================================= LINEAGE VIEW: who trained in whose lab (first-author papers before independence)
+  function lineageOf(id) { const L = D.lineage; if (!L) return { mentors: [], trainees: [] }; return { mentors: L.edges.filter((e) => e.t === id), trainees: L.edges.filter((e) => e.m === id) }; }
+  function buildLineage() {
+    if (!D) return; svgN.selectAll('*').remove();
+    const L = D.lineage; const W = Math.max(graph.clientWidth, 560);
+    if (!L) { svgN.attr('viewBox', `0 0 ${W} 80`).append('text').attr('x', 16).attr('y', 40).attr('fill', css('--muted')).text('No lineage data in this build.'); return; }
+    const vis = D.nodes.filter((n) => laOf(n) >= minLA && roles.has(n.role || 'developer')); const visId = new Set(vis.map((n) => n.id));
+    const extByName = new Map((L.ext || []).map((x) => [x.name, x]));
+    // tree parent = primary mentor if visible (PI node) or external mentor (always shown as a grey root); else the virtual root
+    const items = new Map(); vis.forEach((n) => items.set('n' + n.id, { key: 'n' + n.id, node: n, year: n.ind || n.y0 }));
+    const parentOf = new Map(); const extUsed = new Map();
+    L.edges.filter((e) => e.primary && visId.has(e.t)).forEach((e) => {
+      if (e.m !== null && e.m !== undefined) { if (visId.has(e.m)) parentOf.set('n' + e.t, 'n' + e.m); }
+      else if (e.mext) { const k = 'x' + e.mext; if (!items.has(k)) items.set(k, { key: k, ext: e.mext, name: (extByName.get(e.mext) || {}).name || e.mext, year: 9999, trainees: 0 }); const it = items.get(k); it.year = Math.min(it.year, (e.y0 || it.year) - 2); it.trainees++; parentOf.set('n' + e.t, k); }
+    });
+    const rows = [{ id: 'root', parentId: null }, ...[...items.values()].map((it) => ({ id: it.key, parentId: parentOf.get(it.key) || 'root', it }))];
+    let root; try { root = d3.stratify().id((r) => r.id).parentId((r) => r.parentId)(rows); } catch (e) { root = d3.stratify().id((r) => r.id).parentId((r) => r.id === 'root' ? null : 'root')(rows); }
+    root.sort((a, b) => (a.data.it ? a.data.it.year : 0) - (b.data.it ? b.data.it.year : 0) || d3.ascending(a.data.it && (a.data.it.name || a.data.it.node.name), b.data.it && (b.data.it.name || b.data.it.node.name)));
+    const leaves = root.leaves().length, ROW = 15, TOP = 34, LEFT = 24, RIGHT = 170;
+    const H = TOP + Math.max(300, leaves * ROW) + 20;
+    d3.tree().size([H - TOP - 20, 1])(root);
+    const yrs = [...items.values()].map((it) => it.year).filter((y) => y && y < 9999);
+    const x = d3.scaleLinear().domain([Math.min(2004, d3.min(yrs) || 2007), (d3.max(yrs) || 2026) + 1]).range([LEFT, W - RIGHT]);
+    svgN.attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
+    const ax = svgN.append('g');
+    d3.range(Math.ceil(x.domain()[0]), Math.floor(x.domain()[1]) + 1).forEach((yr) => {
+      ax.append('line').attr('x1', x(yr)).attr('x2', x(yr)).attr('y1', TOP - 8).attr('y2', H - 10).attr('stroke', css('--line')).attr('stroke-width', yr % 5 === 0 ? 1 : 0.4);
+      if (yr % 2 === 0) ax.append('text').text(yr).attr('x', x(yr)).attr('y', 18).attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', css('--font-mono')).attr('fill', css('--muted'));
+    });
+    svgN.append('text').text('← year of first last-author paper (independence); external mentors in grey; dashed = second mentor').attr('x', LEFT).attr('y', H - 2).attr('font-size', 10).attr('fill', css('--muted'));
+    const pos = new Map(); root.descendants().forEach((dn) => { if (dn.data.it) pos.set(dn.data.it.key, [x(Math.min(Math.max(dn.data.it.year || x.domain()[0], x.domain()[0]), x.domain()[1])), TOP + dn.x]); });
+    const link = d3.linkHorizontal().x((p) => p[0]).y((p) => p[1]);
+    const g = svgN.append('g');
+    L.edges.filter((e) => visId.has(e.t)).forEach((e) => {
+      const a = pos.get('n' + e.t), bk = e.m !== null && e.m !== undefined ? 'n' + e.m : 'x' + e.mext, b = pos.get(bk); if (!a || !b) return;
+      const hl = selected && (selected.id === e.t || selected.id === e.m);
+      g.append('path').attr('d', link({ source: b, target: a })).attr('fill', 'none').attr('stroke', hl ? css('--accent') : css('--edge')).attr('stroke-width', e.primary ? 1.2 + 0.25 * Math.min(e.n, 8) : 1).attr('stroke-dasharray', e.primary ? null : '4 3').attr('opacity', !selected ? 0.8 : hl ? 1 : 0.25);
+    });
+    const nb = selected ? new Set([...lineageOf(selected.id).mentors.map((e) => e.m), ...lineageOf(selected.id).trainees.map((e) => e.t)]) : null;
+    const gn = svgN.append('g');
+    items.forEach((it) => {
+      const p = pos.get(it.key); if (!p) return;
+      if (it.node) {
+        const n = it.node;
+        gn.append('circle').datum(n).attr('cx', p[0]).attr('cy', p[1]).attr('r', 0.7 * rNode(n)).style('cursor', 'pointer').call(styleNodes)
+          .attr('opacity', !selected ? 0.95 : n.id === selected.id || nb.has(n.id) ? 1 : 0.3)
+          .on('mouseenter', (ev) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>independent ${n.ind || '?'} · ${laOf(n)} last-author · ${esc(n.role || '')}`)).on('mousemove', moveTip).on('mouseleave', hideTip)
+          .on('click', (ev) => { ev.stopPropagation(); select(n); });
+        gn.append('text').text(n.name).attr('x', p[0] + 0.7 * rNode(n) + 3).attr('y', p[1] + 3.5).attr('font-size', 10).attr('font-family', css('--font-ui')).attr('font-weight', selected && n.id === selected.id ? 700 : 500)
+          .attr('fill', css('--fg')).attr('paint-order', 'stroke').attr('stroke', css('--bg')).attr('stroke-width', 3).attr('pointer-events', 'none').attr('opacity', !selected ? 1 : n.id === selected.id || nb.has(n.id) ? 1 : 0.35);
+      } else {
+        gn.append('circle').attr('cx', p[0]).attr('cy', p[1]).attr('r', 4).attr('fill', css('--unc')).attr('stroke', css('--panel'))
+          .on('mouseenter', (ev) => showTip(ev, `<b>${esc(it.name)}</b><br>mentor outside the SRS map · ${it.trainees} trainee${it.trainees > 1 ? 's' : ''} here`)).on('mousemove', moveTip).on('mouseleave', hideTip);
+        gn.append('text').text(it.name).attr('x', p[0] + 7).attr('y', p[1] + 3.5).attr('font-size', 10).attr('font-style', 'italic').attr('fill', css('--muted')).attr('paint-order', 'stroke').attr('stroke', css('--bg')).attr('stroke-width', 3).attr('pointer-events', 'none');
+      }
+    });
+    svgN.on('click', () => { if (selected) select(null); });
+  }
+
   // ======================================================= PANEL
   function showPI(n) {
     const ps = (papersOf.get(n.id) || []).filter(okP).slice().reverse();
@@ -477,6 +539,11 @@
       <p class="meta"><span class="num">${laOf(n)}</span> last-author · <span class="num">${nOf(n)}</span> papers in this set${n.n_all > nOf(n) ? ` (+${n.n_all - nOf(n)} hidden by filters)` : ''} · <span class="num">${cites}</span> citations · <span class="num">${n.y0}–${n.y1}</span></p>
       <p class="meta"><b>${esc(ROLE[n.role] || n.role || '')}</b>${n.n_methods !== undefined ? ` · ${n.n_methods} method papers, ${n.n_names} naming SRS` : ''}${n.n_scan ? ` · ${n.n_scan} found by the author scan` : ''}</p>
       <h3>Subjects</h3><div class="chips">${bySubj.map(([id, k]) => `<span class="chip ${id ? subjGroup.get(id) : ''}">${esc(sName(id))} <span class="num">${k}</span></span>`).join('')}</div>
+      ${(() => { const li = lineageOf(n.id); if (!D.lineage) return ''; const name = (e) => e.m !== null && e.m !== undefined ? esc((byId.get(e.m) || {}).name || '') : `<i>${esc(((D.lineage.ext || []).find((x) => x.name === e.mext) || {}).name || e.mext)}</i>`;
+        return `<h3>Lineage</h3><p class="meta">independent since <span class="num">${n.ind || '?'}</span></p>` +
+          (li.mentors.length ? `<p>Trained in: ${li.mentors.map((e) => `<span class="chip" ${e.m !== null && e.m !== undefined ? `data-id="${e.m}"` : ''}>${name(e)} <span class="num">${e.n}</span>${e.primary ? '' : ' (2nd)'}</span>`).join(' ')}</p>` : '<p class="meta">no mentor found in the sources (root)</p>') +
+          (li.trainees.length ? `<p>Trained: ${li.trainees.map((e) => `<span class="chip" data-id="${e.t}">${esc((byId.get(e.t) || {}).name || '')} <span class="num">${e.n}</span></span>`).join(' ')}</p>` : '') +
+          (li.mentors.length && li.mentors[0].papers.length ? `<p class="note">evidence: ${li.mentors[0].papers.slice(0, 3).map(esc).join(' · ')}</p>` : ''); })()}
       <h3>Collaborators (shared papers)</h3><div class="chips">${nb.length ? nb.map(([id, w]) => `<span class="chip" data-id="${id}">${esc(byId.get(id).name)} <span class="num">${w}</span></span>`).join('') : '<span class="meta">none in this set</span>'}</div>
       <h3>Papers, newest first (${lead} as last author)</h3>
       <ul class="plist">${ps.map((p) => `<li data-pid="${p.id}" class="${p.lead === n.id ? 'lead' : ''}"><span class="y">${p.y}</span><span>${esc(p.t)}</span></li>`).join('')}</ul>`;
@@ -528,7 +595,7 @@
   $('minw').addEventListener('input', (e) => { minW = +e.target.value; $('minwv').textContent = minW; buildLabs(); });
   $('minla').addEventListener('input', (e) => { minLA = +e.target.value; $('minlav').textContent = minLA; buildLabs(); });
   $('leadOnly').addEventListener('change', (e) => { leadOnly = e.target.checked; buildSubjects(); });
-  function refilter() { recompute(); buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (selected) { drawString(selected); showPI(selected); } updateFsum(); }
+  function refilter() { recompute(); buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (selected) { drawString(selected); showPI(selected); } updateFsum(); }
   $('incConf').addEventListener('change', (e) => { incConf = e.target.checked; refilter(); });
   // --- field filter panel: OpenAlex subfields grouped by field, with paper counts
   function updateFsum() { const off = (D.filters || []).filter((f) => offSub.has(f.sf)); $('fsum').textContent = `${P.length} of ${D.papers.length} papers shown` + (off.length ? ` · ${off.length} subfields off` : '') + (offTech.size ? ` · ${[...offTech].join(', ')} off` : ''); }
@@ -547,10 +614,10 @@
   $('fAll').addEventListener('click', () => { offSub = new Set(); buildFilterList(); refilter(); });
   $('fNone').addEventListener('click', () => { offSub = new Set((D.filters || []).map((f) => f.sf)); buildFilterList(); refilter(); });
   $('fDefaults').addEventListener('click', () => { offSub = new Set((D.filters || []).filter((f) => !f.on).map((f) => f.sf)); buildFilterList(); refilter(); });
-  $('reset').addEventListener('click', () => { $('q').value = ''; select(null); if (view === 'labs') svgL.transition().duration(400).call(zoom.transform, d3.zoomIdentity); else if (view === 'geo') { geoZoom = 1; geoPan = [0, 0]; rot = [-20, -20]; buildGeo(); } else graph.scrollTop = 0; });
-  window.addEventListener('resize', () => { if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (sim) { const W = graph.clientWidth, H = graph.clientHeight; sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart(); } });
+  $('reset').addEventListener('click', () => { $('q').value = ''; select(null); if (view === 'labs') svgL.transition().duration(400).call(zoom.transform, d3.zoomIdentity); else if (view === 'geo') { geoZoom = 1; geoPan = [0, 0]; rot = [-20, -20]; buildGeo(); } else if (view === 'lineage') { buildLineage(); graph.scrollTop = 0; } else graph.scrollTop = 0; });
+  window.addEventListener('resize', () => { if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (sim) { const W = graph.clientWidth, H = graph.clientHeight; sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart(); } });
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  function retheme() { buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (selected) drawString(selected); }
+  function retheme() { buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (selected) drawString(selected); }
   mq.addEventListener('change', retheme); new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 </script>
