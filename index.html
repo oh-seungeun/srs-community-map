@@ -538,7 +538,7 @@
     const bySubj = d3.rollups(ps, (v) => v.length, (p) => pSubj(p)).sort((a, b) => b[1] - a[1]).slice(0, 8);
     panel.innerHTML = `<h2>${esc(n.name)}</h2><div class="meta">${esc(n.inst)}</div>
       <p class="meta"><span class="num">${laOf(n)}</span> last-author · <span class="num">${nOf(n)}</span> papers in this set${n.n_all > nOf(n) ? ` (+${n.n_all - nOf(n)} hidden by filters)` : ''} · <span class="num">${cites}</span> citations · <span class="num">${n.y0}–${n.y1}</span></p>
-      <p class="meta"><b>${esc(ROLE[n.role] || n.role || '')}</b>${n.n_methods !== undefined ? ` · ${n.n_methods} method papers, ${n.n_names} naming SRS` : ''}${n.n_scan ? ` · ${n.n_scan} found by the author scan` : ''}${n.disc ? ` · <b>discovered trainee</b>: entered the map because they trained in ${esc(n.disc)}'s lab and later led SRS work` : ''}</p>
+      <p class="meta"><b>${esc(ROLE[n.role] || n.role || '')}</b>${n.n_methods !== undefined ? ` · ${n.n_methods} method papers, ${n.n_names} naming SRS` : ''}${n.n_scan ? ` · ${n.n_scan} found by the author scan` : ''}${n.n_pmc ? ` · ${n.n_pmc} found by the full-text methods search` : ''}${n.disc ? ` · <b>discovered trainee</b>: entered the map because they trained in ${esc(n.disc)}'s lab and later led SRS work` : ''}</p>
       <h3>Subjects</h3><div class="chips">${bySubj.map(([id, k]) => `<span class="chip ${id ? subjGroup.get(id) : ''}">${esc(sName(id))} <span class="num">${k}</span></span>`).join('')}</div>
       ${(() => { const li = lineageOf(n.id); if (!D.lineage) return ''; const name = (e) => e.m !== null && e.m !== undefined ? esc((byId.get(e.m) || {}).name || '') : `<i>${esc(((D.lineage.ext || []).find((x) => x.name === e.mext) || {}).name || e.mext)}</i>`;
         return `<h3>Lineage</h3><p class="meta">independent since <span class="num">${n.ind || '?'}</span></p>` +
@@ -569,6 +569,7 @@
         ${sec.map((s) => `<span class="chip ${subjGroup.get(s) || ''}">${esc(sName(s))}</span>`).join('')}</div>
       <p class="note">${ov ? 'corrected by a reader' : (p.k ? `assigned by Claude from title and abstract, confidence ${p.k}/3` : 'not yet classified')}${editable ? ' · change the subject above to correct it for everyone' : ''}</p>
       ${p.src === 'scan' ? `<p class="note">Found by the author scan, not by the word search: it cites the lab's own SRS paper. Judged <b>${esc(p.use)}</b> to use SRS${p.why ? ` (${esc(p.why)})` : ''}.</p>` : ''}
+      ${p.src === 'pmc' ? `<p class="note">Found by the Europe PMC full-text search: the title and abstract never name SRS, but the Methods do. Judged <b>${esc(p.use)}</b> to use SRS${p.why ? ` (${esc(p.why)})` : ''}.${p.pmcid ? ` <a href="https://europepmc.org/article/PMC/${esc(p.pmcid.replace('PMC', ''))}" target="_blank" rel="noopener">${esc(p.pmcid)}</a>` : ''}</p>${(p.snips || []).map((s) => `<p class="note">“${esc(s)}”</p>`).join('')}` : ''}
       ${p.src === 'trainee' ? `<p class="note">Found by trainee discovery: the last author trained in a map lab and this paper cites their own SRS work. Judged <b>${esc(p.use)}</b> to use SRS${p.why ? ` (${esc(p.why)})` : ''}.</p>` : ''}
       ${p.topic ? `<p class="meta">OpenAlex topic: ${esc(p.topic)}</p>` : ''}
       ${others.length ? `<h3>Other PIs on this paper</h3><div class="chips">${others.map((m) => `<span class="chip" data-id="${m.id}">${esc(m.name)}</span>`).join('')}</div>` : ''}
