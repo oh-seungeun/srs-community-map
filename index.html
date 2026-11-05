@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light dark} body{margin:0;font:14px system-ui,sans-serif} img{max-width:100%} [hidden]{display:none!important}</style>
+</head>
+<body>
+<title>SRS Community Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: instrument-panel header with a Labs | Subjects switch, full-bleed canvas, details drawer right (bottom sheet on phones). */
+  :root {
+    --bg: #f3f5f7; --panel: #ffffff; --fg: #18212b; --muted: #5f6b78; --line: #d5dbe2;
+    --accent: #0b7a8a; --accent-soft: #bfe3e8; --bead: #0b7a8a; --bead-co: #9fb0bd; --edge: #a9b6c2; --node: #2b3a48; --halo: #f0b429;
+    --meth: #0b7a8a; --appl: #c2622b; --unc: #9aa5b1;
+    --font-ui: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121619; --panel: #1b2126; --fg: #e6eaee; --muted: #98a4b0; --line: #2d353d;
+    --accent: #4fc3d1; --accent-soft: #163f46; --bead: #4fc3d1; --bead-co: #5b6b7a; --edge: #3b4854; --node: #c9d3dc; --halo: #f0b429;
+    --meth: #4fc3d1; --appl: #e8925a; --unc: #5f6b78; color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg: #121619; --panel: #1b2126; --fg: #e6eaee; --muted: #98a4b0; --line: #2d353d;
+    --accent: #4fc3d1; --accent-soft: #163f46; --bead: #4fc3d1; --bead-co: #5b6b7a; --edge: #3b4854; --node: #c9d3dc; --halo: #f0b429;
+    --meth: #4fc3d1; --appl: #e8925a; --unc: #5f6b78; color-scheme: dark; }
+
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); display: flex; flex-direction: column; overflow: hidden; }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+    padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 5px 12px; background: var(--panel); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .ctl label { display: flex; align-items: center; gap: 6px; }
+  input[type=search] { font: 500 13px var(--font-ui); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; width: 170px; }
+  input[type=search]:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input[type=range] { width: 90px; accent-color: var(--accent); }
+  button, select { font: 700 12px var(--font-ui); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  select { font-weight: 500; }
+  button:hover { border-color: var(--accent); }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr minmax(300px, 380px); }
+  #graph { position: relative; min-width: 0; overflow: hidden; }
+  #graph.subjects { overflow-y: auto; }
+  svg { width: 100%; height: 100%; display: block; touch-action: none; }
+  #svgLabs { cursor: grab; } #svgLabs:active { cursor: grabbing; }
+  #svgSubj { height: auto; touch-action: auto; }
+  #svgGeo { cursor: grab; } #svgGeo:active { cursor: grabbing; }
+  .legend { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 10px; font-size: 11.5px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; pointer-events: none; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; min-width: 0;
+    padding-block: 14px; padding-left: 16px; padding-right: max(16px, env(safe-area-inset-right, 0px)); font-size: 13.5px; line-height: 1.45; }
+  aside h2 { font-size: 17px; margin: 0 0 2px; text-wrap: balance; }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; font-weight: 700; }
+  aside .meta { color: var(--muted); font-size: 12.5px; }
+  aside .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  aside p { margin: 6px 0; }
+  aside a { color: var(--accent); }
+  .plist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+  .plist li { display: grid; grid-template-columns: 38px 1fr; gap: 8px; cursor: pointer; padding: 3px 4px; border-radius: 4px; }
+  .plist li:hover, .plist li.on { background: var(--accent-soft); }
+  .plist .y { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .plist .lead { font-weight: 700; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; cursor: pointer; background: var(--bg); }
+  .chip:hover { border-color: var(--accent); }
+  .chip.meth { border-color: var(--meth); } .chip.appl { border-color: var(--appl); }
+  .abstract { font-size: 13px; color: var(--fg); max-width: 60ch; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .note { font-size: 12px; color: var(--muted); }
+  .bar { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 12.5px; align-items: center; }
+  .bar i { display: block; height: 6px; border-radius: 3px; background: var(--accent); }
+  #filters { position: absolute; top: 10px; left: max(16px, env(safe-area-inset-left, 0px)); z-index: 6; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.14); width: min(380px, calc(100% - 32px)); max-height: 70%; display: flex; flex-direction: column; font-size: 12.5px; }
+  #filters .fhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  #flist { overflow-y: auto; padding: 6px 12px 10px; }
+  #ftech label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  #flist h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 10px 0 4px; }
+  #flist label { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 2px 0; cursor: pointer; }
+  #flist label .num { color: var(--muted); }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 9px; font-size: 12px; max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; z-index: 5; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr minmax(0, 42%); }
+    aside { border-left: 0; border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+    input[type=search] { width: 130px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header>
+  <div>
+    <h1>SRS Community Map</h1>
+    <div class="sub" id="sub">loading…</div>
+  </div>
+  <div class="seg" role="group" aria-label="view">
+    <button type="button" data-view="labs" aria-pressed="true">Labs</button>
+    <button type="button" data-view="subjects" aria-pressed="false">Subjects</button>
+    <button type="button" data-view="geo" aria-pressed="false">Geo</button>
+  </div>
+  <div class="ctl">
+    <label for="q">PI <input id="q" type="search" placeholder="name" list="names" autocomplete="off"></label>
+    <datalist id="names"></datalist>
+    <span id="labsCtl">
+      <label><input type="checkbox" class="role" value="developer" checked> developers</label>
+      <label><input type="checkbox" class="role" value="applier" checked> appliers</label>
+      <label><input type="checkbox" class="role" value="user" checked> users</label>
+      <label for="minw">min shared <input id="minw" type="range" min="1" max="8" value="1"> <span class="num" id="minwv">1</span></label>
+      <label for="minla">min last-author <input id="minla" type="range" min="1" max="20" value="3"> <span class="num" id="minlav">3</span></label>
+    </span>
+    <span id="subjCtl" hidden>
+      <label for="leadOnly"><input id="leadOnly" type="checkbox"> last-author papers only</label>
+    </span>
+    <span id="geoCtl" hidden>
+      <span class="seg" role="group" aria-label="projection"><button type="button" data-proj="flat" aria-pressed="true">flat</button><button type="button" data-proj="globe" aria-pressed="false">globe</button></span>
+      <label for="arcs"><input id="arcs" type="checkbox" checked> collaboration arcs</label>
+    </span>
+    <label for="incConf"><input id="incConf" type="checkbox"> include conference abstracts</label>
+    <button type="button" id="filtersBtn" aria-expanded="false">Filters</button>
+    <button type="button" id="reset">reset</button>
+  </div>
+</header>
+<main>
+  <div id="graph">
+    <svg id="svgLabs" role="img" aria-label="Force-directed map of SRS microscopy principal investigators"></svg>
+    <svg id="svgSubj" role="img" aria-label="Papers arranged by subject and year" hidden></svg>
+    <svg id="svgGeo" role="img" aria-label="PIs placed on a world map by institution" hidden></svg>
+    <div id="status">loading data…</div>
+    <div class="tip" id="tip"></div>
+    <div id="filters" hidden>
+      <div class="fhead"><b>Field filters</b> <span class="meta" id="fsum"></span> <button type="button" id="fDefaults">defaults</button> <button type="button" id="fAll">all on</button> <button type="button" id="fNone">all off</button> <button type="button" id="fClose">close</button></div>
+      <div class="fhead" id="ftech"><b>Technique</b>
+        <label><input type="checkbox" class="tech" value="srs" checked> SRS / NoRI</label>
+        <label><input type="checkbox" class="tech" value="cars" checked> CARS</label>
+        <label><input type="checkbox" class="tech" value="other" checked> neither named</label>
+      </div>
+      <div id="flist"></div>
+    </div>
+    <div class="legend" id="legendLabs">
+      <span><i style="background:var(--node)"></i>developer</span>
+      <span><i style="background:var(--panel);border:2px solid var(--node);box-sizing:border-box"></i>applier (uses SRS, names it)</span>
+      <span><i style="background:var(--panel);border:2px dashed var(--node);box-sizing:border-box"></i>user (SRS without naming it)</span>
+      <span>size = last-author papers</span>
+      <span><i style="background:var(--bead)"></i>paper as last author</span>
+      <span><i style="background:var(--bead-co)"></i>paper as co-author</span>
+      <span>line width = shared papers · drag nodes · wheel/pinch to zoom</span>
+    </div>
+  </div>
+  <aside id="panel">
+    <h2>How to read this map</h2>
+    <p class="meta">Each node is a principal investigator with at least three last-author papers (slider: down to one) in the SRS / coherent-Raman microscopy literature since 2007, from OpenAlex. Conference abstracts and data stubs are hidden unless you tick the box, and the Filters panel hides unrelated fields such as structural vibration or pollution by default. Lines connect PIs who share papers. Nearby nodes collaborate often.</p>
+    <p class="meta">Click a PI to unwind their papers into a chronological string of beads around the node. Click a bead for the paper. Switch to <b>Subjects</b> to see every paper as a bead on a shelf per subject, by year.</p>
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const tip = $('tip'), panel = $('panel'), status = $('status'), sub = $('sub'), graph = $('graph');
+  const svgL = d3.select('#svgLabs'), svgS = d3.select('#svgSubj'), svgG = d3.select('#svgGeo');
+  let world = null; fetch('world.json').then((r) => r.ok ? r.json() : null).then((w) => { world = w; if (view === 'geo') buildGeo(); }).catch(() => {});
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let D, byId = new Map(), papersOf = new Map(), subj = new Map(), subjGroup = new Map();
+  let view = 'labs', selected = null, selectedPaper = null, leadOnly = false;
+  let incConf = false;                        // conference abstracts, meeting abstracts and data stubs are hidden by default
+  let offSub = new Set();                     // OpenAlex subfields currently filtered out
+  let offTech = new Set();                    // techniques filtered out: srs | cars | other (coherent Raman / vibrational imaging without naming either)
+  let P = [], S = new Map(), E = [];          // filtered papers, per-PI stats {la, n}, co-authorship edges — all recomputed client-side
+  const okP = (p) => (incConf || !p.conf) && !offSub.has(p.sf || 'Unknown') && (p.tech || ['other']).some((t) => !offTech.has(t));
+  function recompute() {
+    P = D.papers.filter(okP); S = new Map(D.nodes.map((n) => [n.id, { la: 0, n: 0 }])); papersOf = new Map(); const ec = new Map();
+    P.forEach((p) => {
+      p.pis.forEach((id) => { S.get(id).n++; if (!papersOf.has(id)) papersOf.set(id, []); papersOf.get(id).push(p); });
+      if (p.lead >= 0 && S.has(p.lead)) S.get(p.lead).la++;
+      for (let i = 0; i < p.pis.length; i++) for (let j = i + 1; j < p.pis.length; j++) { const k = p.pis[i] + '-' + p.pis[j]; ec.set(k, (ec.get(k) || 0) + 1); }
+    });
+    E = [...ec].map(([k, w]) => { const [s, t] = k.split('-').map(Number); return { s, t, w }; });
+  }
+  const laOf = (n) => (S.get(n.id) || { la: 0 }).la, nOf = (n) => (S.get(n.id) || { n: 0 }).n;
+  let overrides = new Map();                  // paperId -> {p, s} corrections from the shared store
+  let db = null, canWrite = null, userId = null;
+
+  // ---------- data
+  fetch('data.json').then((r) => { if (!r.ok) throw new Error('data.json ' + r.status); return r.json(); }).then((d) => {
+    D = d; status.hidden = true;
+    byId = new Map(d.nodes.map((n) => [n.id, n]));
+    offSub = new Set((d.filters || []).filter((f) => !f.on).map((f) => f.sf)); recompute(); buildFilterList();
+    (d.subjects.methods || []).forEach((t) => { subj.set(t.id, t); subjGroup.set(t.id, 'meth'); });
+    (d.subjects.applications || []).forEach((t) => { subj.set(t.id, t); subjGroup.set(t.id, 'appl'); });
+    sub.textContent = `${d.nodes.length} PIs · ${d.papers.length} papers · ${d.n_works_total} works searched · built ${d.built}`;
+    const dl = $('names'); d.nodes.forEach((n) => { const o = document.createElement('option'); o.value = n.name; dl.appendChild(o); });
+    buildLabs(); setView(['subjects', 'geo'].includes((location.hash || '#labs').slice(1)) ? location.hash.slice(1) : 'labs', false);
+    connectStore();
+  }).catch((e) => { status.textContent = 'Could not load the data: ' + e.message; });
+
+  const pSubj = (p) => (overrides.get(p.id) || p).p || '';
+  const pSec = (p) => (overrides.get(p.id) || p).s || [];
+  const sName = (id) => id ? (subj.get(id) ? subj.get(id).name : id) : 'Unclassified';
+
+  // ---------- shared store: tag corrections live in tags/<paperId> = {p, s, at}
+  async function connectStore() {
+    try {
+      if (!window.claude || !window.claude.use) return;
+      const [store, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+      if (!store) return;
+      db = store; if (user) { canWrite = await user.can('data.write'); userId = await user.id(); }
+      let timer = setTimeout(() => { /* store slow: page already renders from bundled labels */ }, 10000);
+      db.collection('tags').onSnapshot((snap) => {
+        clearTimeout(timer); overrides = new Map(snap.docs.filter((x) => x.exists).map((x) => [x.id, x.data()]));
+        if (view === 'subjects') buildSubjects();
+        if (selectedPaper) showPaper(selectedPaper, selected);
+      }, () => { clearTimeout(timer); });
+    } catch (e) { /* no store in this view */ }
+  }
+  async function saveTag(p, primary, secondary) {
+    if (!db) return false;
+    try { await db.doc('tags/' + p.id).set({ p: primary, s: secondary, at: new Date().toISOString() }); return true; }
+    catch (e) { if (e && e.code === 'invalid_argument') canWrite = false; return false; }
+  }
+
+  // ---------- views
+  function setView(v, push = true) {
+    view = v; if (push && location.hash !== '#' + v) location.hash = v;
+    document.querySelectorAll('.seg button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+    // SVG elements have no `hidden` property, so toggle the attribute (the page CSS hides [hidden])
+    const showSvg = (id, on) => { const el = $(id); if (on) el.removeAttribute('hidden'); else el.setAttribute('hidden', ''); };
+    showSvg('svgLabs', v === 'labs'); showSvg('svgSubj', v === 'subjects'); showSvg('svgGeo', v === 'geo'); $('legendLabs').hidden = v === 'subjects';
+    $('labsCtl').hidden = v !== 'labs'; $('subjCtl').hidden = v !== 'subjects'; $('geoCtl').hidden = v !== 'geo'; graph.classList.toggle('subjects', v === 'subjects');
+    if (v === 'subjects') buildSubjects(); else if (v === 'geo') buildGeo(); else { applyEmphasis(); if (selected) drawString(selected); }
+  }
+  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['labs', 'subjects', 'geo'].includes(v) && v !== view) setView(v, false); });
+  document.querySelectorAll('.seg button[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+
+  // ======================================================= LABS VIEW
+  const g = svgL.append('g');
+  const gEdge = g.append('g'), gString = g.append('g'), gNode = g.append('g'), gLabel = g.append('g'), gBead = g.append('g');
+  let nodes = [], edges = [], neighbors = new Map(), minW = 1, minLA = 3, sim;
+  let roles = new Set(['developer', 'applier', 'user']);
+  const ROLE = { developer: 'developer: most last-author papers are method papers', applier: 'applier: uses SRS and names it', user: 'user: SRS results without naming the technique' };
+  function styleNodes(sel) {   // role is encoded in the node's fill and outline
+    sel.attr('fill', (n) => n.role === 'developer' ? css('--node') : css('--panel'))
+      .attr('stroke', (n) => selected && n.id === selected.id ? css('--halo') : (n.role === 'developer' ? css('--panel') : css('--node')))
+      .attr('stroke-width', (n) => selected && n.id === selected.id ? 3 : (n.role === 'developer' ? 1.5 : 2))
+      .attr('stroke-dasharray', (n) => n.role === 'user' && !(selected && n.id === selected.id) ? '3 2' : null);
+  }
+  const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => g.attr('transform', e.transform));
+  svgL.call(zoom).on('dblclick.zoom', null);
+  function rNode(n) { return 4 + 2.2 * Math.sqrt(laOf(n)); }
+  function rBead(p) { return 2.6 + 1.3 * Math.sqrt(Math.min(p.c, 400) / 10); }
+
+  function buildLabs() {
+    nodes = D.nodes.filter((n) => laOf(n) >= minLA && roles.has(n.role || 'developer'));
+    // filters can leave nobody above the threshold: lower it automatically until someone appears (the slider shows the new value)
+    let auto = false;
+    while (!nodes.length && minLA > 1) { minLA -= 1; auto = true; nodes = D.nodes.filter((n) => laOf(n) >= minLA && roles.has(n.role || 'developer')); }
+    if (auto) { $('minla').value = minLA; $('minlav').textContent = minLA + ' (auto)'; }
+    const keep = new Set(nodes.map((n) => n.id));
+    edges = E.filter((e) => e.w >= minW && keep.has(e.s) && keep.has(e.t)).map((e) => ({ source: e.s, target: e.t, w: e.w }));
+    neighbors = new Map(); edges.forEach((e) => {
+      if (!neighbors.has(e.source)) neighbors.set(e.source, new Map()); if (!neighbors.has(e.target)) neighbors.set(e.target, new Map());
+      neighbors.get(e.source).set(e.target, e.w); neighbors.get(e.target).set(e.source, e.w);
+    });
+    const W = graph.clientWidth || 800, H = graph.clientHeight || 600;
+    if (sim) sim.stop();
+    sim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(edges).id((n) => n.id).distance((e) => 70 - 6 * Math.min(e.w, 6)).strength((e) => 0.25 + 0.1 * Math.min(e.w, 5)))
+      .force('charge', d3.forceManyBody().strength((n) => -40 - 12 * n.la))
+      .force('center', d3.forceCenter(W / 2, H / 2))
+      .force('collide', d3.forceCollide((n) => rNode(n) + 4).iterations(2))
+      .force('x', d3.forceX(W / 2).strength(0.04)).force('y', d3.forceY(H / 2).strength(0.06))
+      .on('tick', tick);
+    const line = gEdge.selectAll('line').data(edges, (e) => e.source.id + '-' + e.target.id);
+    line.exit().remove();
+    line.enter().append('line').merge(gEdge.selectAll('line')).attr('stroke', css('--edge')).attr('stroke-width', (e) => 0.8 + 0.8 * Math.min(e.w, 8)).attr('stroke-opacity', 0.7);
+    const circ = gNode.selectAll('circle').data(nodes, (n) => n.id);
+    circ.exit().remove();
+    circ.enter().append('circle').attr('tabindex', 0).merge(gNode.selectAll('circle'))
+      .attr('r', rNode).style('cursor', 'pointer').call(styleNodes)
+      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${laOf(n)} last-author · ${nOf(n)} papers · ${n.y0}–${n.y1}<br><span style="color:var(--muted)">${esc(n.role || '')}</span>`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip)
+      .on('click', (ev, n) => { ev.stopPropagation(); select(n); })
+      .on('keydown', (ev, n) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(n); } })
+      .call(d3.drag().on('start', (ev, n) => { if (!ev.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
+        .on('drag', (ev, n) => { n.fx = ev.x; n.fy = ev.y; })
+        .on('end', (ev, n) => { if (!ev.active) sim.alphaTarget(0); n.fx = null; n.fy = null; }));
+    const lab = gLabel.selectAll('text').data(nodes.filter((n) => laOf(n) >= 10), (n) => n.id);
+    lab.exit().remove();
+    lab.enter().append('text').merge(gLabel.selectAll('text')).text((n) => n.name)
+      .attr('font-size', 11).attr('font-family', css('--font-ui')).attr('font-weight', 700).attr('fill', css('--fg'))
+      .attr('paint-order', 'stroke').attr('stroke', css('--bg')).attr('stroke-width', 3).attr('pointer-events', 'none');
+    svgL.on('click', () => { if (selected) select(null); });
+    if (selected && !keep.has(selected.id)) select(null); else applyEmphasis();
+  }
+  function tick() {
+    gEdge.selectAll('line').attr('x1', (e) => e.source.x).attr('y1', (e) => e.source.y).attr('x2', (e) => e.target.x).attr('y2', (e) => e.target.y);
+    gNode.selectAll('circle').attr('cx', (n) => n.x).attr('cy', (n) => n.y);
+    gLabel.selectAll('text').attr('x', (n) => n.x + rNode(n) + 3).attr('y', (n) => n.y + 4);
+    if (selected && view === 'labs') drawString(selected);
+  }
+  const TURN = 17, GAP = 13;
+  function spiralPos(k, n) { const b = TURN / (2 * Math.PI), s = 14 + k * GAP, th = Math.sqrt(2 * s / b), r = rNode(n) + 8 + b * th; return [n.x + r * Math.cos(th), n.y + r * Math.sin(th)]; }
+  function drawString(n) {
+    const ps = (papersOf.get(n.id) || []).filter(okP);
+    const pts = []; const b = TURN / (2 * Math.PI), sMax = 14 + (ps.length - 1) * GAP;
+    for (let s = 14; s <= sMax; s += 4) { const th = Math.sqrt(2 * s / b), r = rNode(n) + 8 + b * th; pts.push([n.x + r * Math.cos(th), n.y + r * Math.sin(th)]); }
+    const path = gString.selectAll('path').data(ps.length ? [pts] : []);
+    path.exit().remove();
+    path.enter().append('path').merge(gString.selectAll('path')).attr('d', d3.line()).attr('fill', 'none').attr('stroke', css('--edge')).attr('stroke-width', 1).attr('stroke-dasharray', '2 3');
+    const beads = gBead.selectAll('circle').data(ps, (p) => p.id);
+    beads.exit().remove();
+    beads.enter().append('circle').merge(gBead.selectAll('circle'))
+      .attr('r', rBead).attr('fill', (p) => p.lead === n.id ? css('--bead') : css('--bead-co'))
+      .attr('stroke', (p) => selectedPaper && p.id === selectedPaper.id ? css('--halo') : css('--panel')).attr('stroke-width', (p) => selectedPaper && p.id === selectedPaper.id ? 3 : 1)
+      .attr('cx', (p, i) => spiralPos(i, n)[0]).attr('cy', (p, i) => spiralPos(i, n)[1]).style('cursor', 'pointer')
+      .on('mouseenter', (ev, p) => showTip(ev, `<b>${p.y}</b> · ${esc(p.j)}<br>${esc(p.t)}<br><span style="color:var(--muted)">${esc(sName(pSubj(p)))}</span>`)).on('mousemove', moveTip).on('mouseleave', hideTip)
+      .on('click', (ev, p) => { ev.stopPropagation(); showPaper(p, n); });
+    const ticks = []; ps.forEach((p, i) => { if (i === 0 || p.y !== ps[i - 1].y && p.y % 5 === 0) ticks.push({ y: p.y, i }); });
+    const tk = gString.selectAll('text').data(ticks, (t) => t.y);
+    tk.exit().remove();
+    tk.enter().append('text').merge(gString.selectAll('text')).text((t) => t.y).attr('font-size', 9).attr('font-family', css('--font-mono')).attr('fill', css('--muted'))
+      .attr('x', (t) => spiralPos(t.i, n)[0] + 6).attr('y', (t) => spiralPos(t.i, n)[1] - 6).attr('pointer-events', 'none');
+  }
+  function select(n) {
+    selected = n; selectedPaper = null;
+    gString.selectAll('*').remove(); gBead.selectAll('*').remove();
+    applyEmphasis();
+    if (view === 'subjects') { buildSubjects(); }
+    if (view === 'geo') { buildGeo(); }
+    if (!n) { panel.innerHTML = '<h2>How to read this map</h2><p class="meta">Click a PI to unwind their papers into a chronological string of beads. Click a bead for the paper. In the Subjects view, pick a PI to highlight their beads on every shelf.</p>'; return; }
+    if (view === 'labs') {
+      drawString(n);
+      const t = d3.zoomTransform(svgL.node()), W = graph.clientWidth, H = graph.clientHeight;
+      svgL.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(W / 2 - n.x * t.k, H / 2 - n.y * t.k).scale(t.k));
+    }
+    showPI(n);
+  }
+  function applyEmphasis() {
+    const nb = selected ? (neighbors.get(selected.id) || new Map()) : null;
+    gNode.selectAll('circle').attr('opacity', (n) => !selected ? 1 : n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.25).call(styleNodes);
+    gEdge.selectAll('line').attr('stroke-opacity', (e) => !selected ? 0.7 : (e.source.id === selected.id || e.target.id === selected.id) ? 0.95 : 0.12)
+      .attr('stroke', (e) => selected && (e.source.id === selected.id || e.target.id === selected.id) ? css('--accent') : css('--edge'));
+    gLabel.selectAll('text').attr('opacity', (n) => !selected ? 1 : n.id === selected.id || nb.has(n.id) ? 1 : 0.3);
+  }
+
+  // ======================================================= SUBJECTS VIEW: one shelf per subject, beads placed by year
+  const PITCH = 9, LABEL_W = 190, PAD_R = 24, TOP = 34;
+  function buildSubjects() {
+    if (!D) return;
+    svgS.selectAll('*').remove();
+    const W = Math.max(graph.clientWidth, 520), innerW = W - LABEL_W - PAD_R;
+    const years = d3.extent(P.length ? P : D.papers, (p) => p.y); const x = d3.scaleLinear().domain([years[0], years[1] + 1]).range([LABEL_W, W - PAD_R]);
+    const band = x(years[0] + 1) - x(years[0]), cols = Math.max(1, Math.floor((band - 2) / PITCH));
+    const order = [...(D.subjects.methods || []).map((t) => t.id), ...(D.subjects.applications || []).map((t) => t.id), ''];
+    const rows = order.map((id) => ({ id, ps: P.filter((p) => pSubj(p) === id && (!leadOnly || p.lead >= 0)) })).filter((r) => r.ps.length);
+    const mine = selected ? new Set((papersOf.get(selected.id) || []).filter(okP).map((p) => p.id)) : null;
+    // layout: per row, per year, a small grid of beads
+    let y0 = TOP; const placed = [];
+    rows.forEach((r) => {
+      const byYear = d3.group(r.ps.sort((a, b) => a.y - b.y || b.c - a.c), (p) => p.y);
+      let maxRows = 1;
+      byYear.forEach((ps, yr) => {
+        ps.forEach((p, i) => { const c = i % cols, rr = Math.floor(i / cols); maxRows = Math.max(maxRows, rr + 1); placed.push({ p, px: x(yr) + 5 + c * PITCH, ry: rr, row: r }); });
+      });
+      r.y = y0; r.h = Math.max(22, maxRows * PITCH + 10); y0 += r.h;
+    });
+    placed.forEach((d) => { d.py = d.row.y + 8 + d.ry * PITCH; });
+    const H = y0 + 10; svgS.attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
+    // year axis
+    const ax = svgS.append('g');
+    d3.range(years[0], years[1] + 1).forEach((yr) => {
+      if (yr % 2 === 0) ax.append('text').text(yr).attr('x', x(yr) + band / 2).attr('y', 20).attr('text-anchor', 'middle').attr('font-size', 10).attr('font-family', css('--font-mono')).attr('fill', css('--muted'));
+      ax.append('line').attr('x1', x(yr)).attr('x2', x(yr)).attr('y1', TOP - 6).attr('y2', H - 10).attr('stroke', css('--line')).attr('stroke-width', yr % 5 === 0 ? 1 : 0.5);
+    });
+    // shelves
+    const sh = svgS.append('g').selectAll('g').data(rows).enter().append('g');
+    sh.append('line').attr('x1', 12).attr('x2', W - PAD_R).attr('y1', (r) => r.y + r.h).attr('y2', (r) => r.y + r.h).attr('stroke', css('--line'));
+    sh.append('text').text((r) => sName(r.id)).attr('x', 12).attr('y', (r) => r.y + 14).attr('font-size', 11.5).attr('font-weight', 700).attr('font-family', css('--font-ui'))
+      .attr('fill', (r) => r.id ? css(subjGroup.get(r.id) === 'meth' ? '--meth' : '--appl') : css('--muted')).style('cursor', 'pointer')
+      .on('click', (ev, r) => showSubject(r));
+    sh.append('text').text((r) => mine ? `${r.ps.filter((p) => mine.has(p.id)).length} / ${r.ps.length}` : r.ps.length).attr('x', 12).attr('y', (r) => r.y + 27).attr('font-size', 10).attr('font-family', css('--font-mono')).attr('fill', css('--muted'));
+    // beads
+    svgS.append('g').selectAll('circle').data(placed, (d) => d.p.id).enter().append('circle')
+      .attr('cx', (d) => d.px).attr('cy', (d) => d.py).attr('r', (d) => mine && mine.has(d.p.id) ? 4.2 : 3.4)
+      .attr('fill', (d) => d.row.id ? css(subjGroup.get(d.row.id) === 'meth' ? '--meth' : '--appl') : css('--unc'))
+      .attr('opacity', (d) => !mine ? 0.85 : mine.has(d.p.id) ? 1 : 0.14)
+      .attr('stroke', (d) => selectedPaper && d.p.id === selectedPaper.id ? css('--halo') : (mine && mine.has(d.p.id) && d.p.lead === selected.id ? css('--fg') : 'none')).attr('stroke-width', (d) => selectedPaper && d.p.id === selectedPaper.id ? 3 : 1.2)
+      .style('cursor', 'pointer')
+      .on('mouseenter', (ev, d) => showTip(ev, `<b>${d.p.y}</b> · ${esc(d.p.j)}<br>${esc(d.p.t)}<br><span style="color:var(--muted)">${esc(d.p.au.join(', '))}</span>`)).on('mousemove', moveTip).on('mouseleave', hideTip)
+      .on('click', (ev, d) => { ev.stopPropagation(); showPaper(d.p, selected && mine.has(d.p.id) ? selected : (d.p.lead >= 0 ? byId.get(d.p.lead) : byId.get(d.p.pis[0]))); });
+  }
+  function showSubject(r) {
+    const t = subj.get(r.id); const ps = r.ps.slice().sort((a, b) => b.y - a.y || b.c - a.c);
+    const pis = d3.rollups(ps.filter((p) => p.lead >= 0), (v) => v.length, (p) => p.lead).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const max = pis.length ? pis[0][1] : 1;
+    panel.innerHTML = `<h2>${esc(sName(r.id))}</h2><div class="meta">${t ? esc(t.def) : 'papers whose subject has not been assigned yet'}</div>
+      <p class="meta"><span class="num">${ps.length}</span> papers · <span class="num">${ps[ps.length - 1] ? ps[ps.length - 1].y : ''}–${ps[0] ? ps[0].y : ''}</span></p>
+      <h3>Leading labs (last-author papers)</h3>${pis.map(([id, n]) => `<div class="bar"><span class="chip" data-id="${id}">${esc(byId.get(id).name)}</span><span class="num">${n}</span><i style="width:${Math.round(100 * n / max)}%;grid-column:1/3"></i></div>`).join('') || '<span class="meta">none</span>'}
+      <h3>Papers, newest first</h3><ul class="plist">${ps.slice(0, 200).map((p) => `<li data-pid="${p.id}"><span class="y">${p.y}</span><span>${esc(p.t)}</span></li>`).join('')}</ul>${ps.length > 200 ? `<p class="meta">… ${ps.length - 200} more</p>` : ''}`;
+    panel.scrollTop = 0;
+    panel.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => { const m = byId.get(+c.dataset.id); if (m) select(m); }));
+    panel.querySelectorAll('.plist li').forEach((li) => li.addEventListener('click', () => { const p = ps.find((x) => x.id === li.dataset.pid); showPaper(p, p.lead >= 0 ? byId.get(p.lead) : byId.get(p.pis[0])); }));
+  }
+
+  // ======================================================= GEO VIEW: PIs at their institution, flat map or globe
+  let proj = 'flat', showArcs = true, geoZoom = 1, rot = [-20, -20], geoPan = [0, 0];
+  function buildGeo() {
+    if (!D) return;
+    svgG.selectAll('*').remove();
+    const W = graph.clientWidth || 800, H = graph.clientHeight || 600;
+    svgG.attr('viewBox', `0 0 ${W} ${H}`);
+    const projection = proj === 'globe'
+      ? d3.geoOrthographic().rotate(rot).fitExtent([[20, 20], [W - 20, H - 20]], { type: 'Sphere' }).clipAngle(90)
+      : d3.geoNaturalEarth1().rotate([rot[0], 0]).fitExtent([[10, 10], [W - 10, H - 10]], { type: 'Sphere' });   // flat map rotates about the central meridian
+    projection.scale(projection.scale() * geoZoom);
+    if (proj === 'flat') projection.translate([projection.translate()[0] + geoPan[0], projection.translate()[1] + geoPan[1]]);
+    const path = d3.geoPath(projection);
+    const g = svgG.append('g');
+    g.append('path').datum({ type: 'Sphere' }).attr('d', path).attr('fill', css('--panel')).attr('stroke', css('--line'));
+    g.append('path').datum(d3.geoGraticule10()).attr('d', path).attr('fill', 'none').attr('stroke', css('--line')).attr('stroke-width', 0.4);
+    if (world) g.append('path').datum(topojson.feature(world, world.objects.land)).attr('d', path).attr('fill', css('--bg')).attr('stroke', css('--edge')).attr('stroke-width', 0.5);
+    const placed = D.nodes.filter((n) => n.lat !== null && n.lat !== undefined && laOf(n) >= minLA && roles.has(n.role || 'developer'));
+    // spread PIs that share an institution on a small ring so each stays clickable
+    const groups = d3.group(placed, (n) => n.lon + ',' + n.lat);
+    const pos = new Map();
+    const visible = (n) => proj !== 'globe' || d3.geoDistance([n.lon, n.lat], [-rot[0], -rot[1]]) < Math.PI / 2;
+    groups.forEach((ns) => ns.forEach((n, i) => {
+      const p = projection([n.lon, n.lat]); if (!p || !visible(n)) return;
+      const k = ns.length, r = k > 1 ? 6 + 1.6 * k : 0, a = (2 * Math.PI * i) / k;
+      pos.set(n.id, [p[0] + r * Math.cos(a), p[1] + r * Math.sin(a)]);
+    }));
+    const nb = selected ? (neighbors.get(selected.id) || new Map()) : null;
+    if (showArcs) {
+      const arcs = E.filter((e) => e.w >= minW && pos.has(e.s) && pos.has(e.t)).map((e) => ({ e, a: byId.get(e.s), b: byId.get(e.t) }));
+      g.append('g').selectAll('path').data(arcs).enter().append('path')
+        .attr('d', (d) => path({ type: 'LineString', coordinates: [[d.a.lon, d.a.lat], [d.b.lon, d.b.lat]] }))
+        .attr('fill', 'none').attr('stroke', (d) => selected && (d.e.s === selected.id || d.e.t === selected.id) ? css('--accent') : css('--edge'))
+        .attr('stroke-width', (d) => 0.6 + 0.5 * Math.min(d.e.w, 6)).attr('stroke-opacity', (d) => !selected ? 0.45 : (d.e.s === selected.id || d.e.t === selected.id) ? 0.95 : 0.1);
+    }
+    const dots = g.append('g').selectAll('circle').data(placed.filter((n) => pos.has(n.id)), (n) => n.id).enter().append('circle')
+      .attr('cx', (n) => pos.get(n.id)[0]).attr('cy', (n) => pos.get(n.id)[1]).attr('r', (n) => 0.75 * rNode(n)).style('cursor', 'pointer').call(styleNodes)
+      .attr('opacity', (n) => !selected ? 0.95 : n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.3)
+      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${esc([n.city, n.cc].filter(Boolean).join(', '))} · ${laOf(n)} last-author · ${esc(n.role || '')}`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip)
+      .on('click', (ev, n) => { ev.stopPropagation(); select(n); });
+    g.append('g').selectAll('text').data(placed.filter((n) => pos.has(n.id) && (laOf(n) >= 15 || (selected && (n.id === selected.id || nb.has(n.id)))))).enter().append('text')
+      .text((n) => n.name).attr('x', (n) => pos.get(n.id)[0] + 0.75 * rNode(n) + 2).attr('y', (n) => pos.get(n.id)[1] + 3)
+      .attr('font-size', 10).attr('font-family', css('--font-ui')).attr('font-weight', 700).attr('fill', css('--fg')).attr('paint-order', 'stroke').attr('stroke', css('--panel')).attr('stroke-width', 3).attr('pointer-events', 'none');
+    // drag: rotate the globe or pan the flat map; wheel: zoom
+    svgG.call(d3.drag().on('drag', (ev) => {
+      if (proj === 'globe') { const k = 0.25 / geoZoom; rot = [rot[0] + ev.dx * k, Math.max(-90, Math.min(90, rot[1] - ev.dy * k))]; }
+      else { const k = 360 / (W * geoZoom); rot = [rot[0] + ev.dx * k, rot[1]]; geoPan = [geoPan[0], geoPan[1] + ev.dy]; }   // horizontal drag spins the map, vertical drag pans
+      buildGeo();
+    }));
+    svgG.on('wheel', (ev) => { ev.preventDefault(); geoZoom = Math.min(12, Math.max(0.6, geoZoom * Math.exp(-ev.deltaY * 0.0015))); buildGeo(); }, { passive: false });
+    svgG.on('click', () => { if (selected) select(null); });
+  }
+  document.querySelectorAll('[data-proj]').forEach((b) => b.addEventListener('click', () => { proj = b.dataset.proj; document.querySelectorAll('[data-proj]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); geoZoom = 1; geoPan = [0, 0]; buildGeo(); }));
+  $('arcs').addEventListener('change', (e) => { showArcs = e.target.checked; buildGeo(); });
+
+  // ======================================================= PANEL
+  function showPI(n) {
+    const ps = (papersOf.get(n.id) || []).filter(okP).slice().reverse();
+    const nb = [...(neighbors.get(n.id) || new Map()).entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+    const lead = ps.filter((p) => p.lead === n.id).length, cites = ps.reduce((a, p) => a + p.c, 0);
+    const bySubj = d3.rollups(ps, (v) => v.length, (p) => pSubj(p)).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    panel.innerHTML = `<h2>${esc(n.name)}</h2><div class="meta">${esc(n.inst)}</div>
+      <p class="meta"><span class="num">${laOf(n)}</span> last-author · <span class="num">${nOf(n)}</span> papers in this set${n.n_all > nOf(n) ? ` (+${n.n_all - nOf(n)} hidden by filters)` : ''} · <span class="num">${cites}</span> citations · <span class="num">${n.y0}–${n.y1}</span></p>
+      <p class="meta"><b>${esc(ROLE[n.role] || n.role || '')}</b>${n.n_methods !== undefined ? ` · ${n.n_methods} method papers, ${n.n_names} naming SRS` : ''}${n.n_scan ? ` · ${n.n_scan} found by the author scan` : ''}</p>
+      <h3>Subjects</h3><div class="chips">${bySubj.map(([id, k]) => `<span class="chip ${id ? subjGroup.get(id) : ''}">${esc(sName(id))} <span class="num">${k}</span></span>`).join('')}</div>
+      <h3>Collaborators (shared papers)</h3><div class="chips">${nb.length ? nb.map(([id, w]) => `<span class="chip" data-id="${id}">${esc(byId.get(id).name)} <span class="num">${w}</span></span>`).join('') : '<span class="meta">none in this set</span>'}</div>
+      <h3>Papers, newest first (${lead} as last author)</h3>
+      <ul class="plist">${ps.map((p) => `<li data-pid="${p.id}" class="${p.lead === n.id ? 'lead' : ''}"><span class="y">${p.y}</span><span>${esc(p.t)}</span></li>`).join('')}</ul>`;
+    panel.scrollTop = 0;
+    panel.querySelectorAll('.chip[data-id]').forEach((c) => c.addEventListener('click', () => { const m = byId.get(+c.dataset.id); if (m && laOf(m) >= minLA) select(m); }));
+    panel.querySelectorAll('.plist li').forEach((li) => li.addEventListener('click', () => { const p = ps.find((x) => x.id === li.dataset.pid); showPaper(p, n); }));
+  }
+  function showPaper(p, n) {
+    selectedPaper = p; if (view === 'labs' && n) drawString(n); if (view === 'subjects') buildSubjects();
+    const others = p.pis.filter((id) => !n || id !== n.id).map((id) => byId.get(id)).filter(Boolean);
+    const prim = pSubj(p), sec = pSec(p), ov = overrides.get(p.id);
+    const opts = (cur) => `<option value="">Unclassified</option><optgroup label="Methods">${(D.subjects.methods || []).map((t) => `<option value="${t.id}" ${t.id === cur ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup><optgroup label="Applications">${(D.subjects.applications || []).map((t) => `<option value="${t.id}" ${t.id === cur ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup>`;
+    const editable = canWrite !== false && db;
+    panel.innerHTML = `<button type="button" id="back">← ${n ? esc(n.name) : 'back'}</button>
+      <h2 style="margin-top:10px">${esc(p.t)}</h2>
+      <div class="meta">${esc(p.au.join(', '))}</div>
+      <p class="meta">${esc(p.j)} · <span class="num">${p.y}</span> · <span class="num">${p.c}</span> citations${n && p.lead === n.id ? ' · last author' : ''}${p.conf ? ' · <b>conference abstract / stub</b>' : ''}</p>
+      ${p.sf ? `<p class="meta">OpenAlex field: ${esc(p.f)} › ${esc(p.sf)} · technique named: ${esc((p.tech || []).map((t) => ({ srs: 'SRS', cars: 'CARS', other: 'neither' })[t]).join(', '))}</p>` : ''}
+      ${p.doi ? `<p><a href="https://doi.org/${esc(p.doi)}" target="_blank" rel="noopener">doi.org/${esc(p.doi)}</a></p>` : ''}
+      <h3>Subject</h3>
+      <div class="tagrow">${editable ? `<select id="tagP" aria-label="primary subject">${opts(prim)}</select>` : `<span class="chip ${prim ? subjGroup.get(prim) : ''}">${esc(sName(prim))}</span>`}
+        ${sec.map((s) => `<span class="chip ${subjGroup.get(s) || ''}">${esc(sName(s))}</span>`).join('')}</div>
+      <p class="note">${ov ? 'corrected by a reader' : (p.k ? `assigned by Claude from title and abstract, confidence ${p.k}/3` : 'not yet classified')}${editable ? ' · change the subject above to correct it for everyone' : ''}</p>
+      ${p.src === 'scan' ? `<p class="note">Found by the author scan, not by the word search: it cites the lab's own SRS paper. Judged <b>${esc(p.use)}</b> to use SRS${p.why ? ` (${esc(p.why)})` : ''}.</p>` : ''}
+      ${p.topic ? `<p class="meta">OpenAlex topic: ${esc(p.topic)}</p>` : ''}
+      ${others.length ? `<h3>Other PIs on this paper</h3><div class="chips">${others.map((m) => `<span class="chip" data-id="${m.id}">${esc(m.name)}</span>`).join('')}</div>` : ''}
+      <h3>Abstract</h3><p class="abstract">${p.a ? esc(p.a) : '<span class="meta">No abstract available from OpenAlex.</span>'}</p>`;
+    panel.scrollTop = 0;
+    $('back').addEventListener('click', () => { selectedPaper = null; if (n && view === 'labs') { drawString(n); showPI(n); } else if (n) { showPI(n); buildSubjects(); } else select(null); });
+    panel.querySelectorAll('.chip[data-id]').forEach((c) => c.addEventListener('click', () => { const m = byId.get(+c.dataset.id); if (m) select(m); }));
+    const sel = $('tagP');
+    if (sel) sel.addEventListener('change', async () => {
+      const v = sel.value; if (v === prim) return;
+      sel.disabled = true; const ok = await saveTag(p, v, sec.filter((s) => s !== v)); sel.disabled = false;
+      if (!ok) { sel.value = prim; panel.querySelector('.note').textContent = canWrite === false ? 'Only the owner and editors can correct subjects.' : 'Could not save the correction. Try again.'; }
+    });
+  }
+
+  // ---------- tooltip, controls
+  function showTip(ev, html) { tip.innerHTML = html; tip.style.display = 'block'; moveTip(ev); }
+  function moveTip(ev) { const r = graph.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 290) + 'px'; tip.style.top = (ev.clientY - r.top + 12 + (view === 'subjects' ? graph.scrollTop : 0)) + 'px'; }
+  function hideTip() { tip.style.display = 'none'; }
+  $('q').addEventListener('change', (e) => {
+    const v = e.target.value.trim().toLowerCase(); if (!v) { if (selected) select(null); return; }
+    const n = D.nodes.find((x) => x.name.toLowerCase() === v) || D.nodes.find((x) => x.name.toLowerCase().includes(v));
+    if (n) { if (view === 'labs' && laOf(n) < minLA) { minLA = 3; $('minla').value = 3; $('minlav').textContent = 3; buildLabs(); } select(n); }
+  });
+  document.querySelectorAll('input.role').forEach((c) => c.addEventListener('change', () => { roles = new Set([...document.querySelectorAll('input.role:checked')].map((x) => x.value)); buildLabs(); }));
+  $('minw').addEventListener('input', (e) => { minW = +e.target.value; $('minwv').textContent = minW; buildLabs(); });
+  $('minla').addEventListener('input', (e) => { minLA = +e.target.value; $('minlav').textContent = minLA; buildLabs(); });
+  $('leadOnly').addEventListener('change', (e) => { leadOnly = e.target.checked; buildSubjects(); });
+  function refilter() { recompute(); buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (selected) { drawString(selected); showPI(selected); } updateFsum(); }
+  $('incConf').addEventListener('change', (e) => { incConf = e.target.checked; refilter(); });
+  // --- field filter panel: OpenAlex subfields grouped by field, with paper counts
+  function updateFsum() { const off = (D.filters || []).filter((f) => offSub.has(f.sf)); $('fsum').textContent = `${P.length} of ${D.papers.length} papers shown` + (off.length ? ` · ${off.length} subfields off` : '') + (offTech.size ? ` · ${[...offTech].join(', ')} off` : ''); }
+  function buildFilterList() {
+    const byField = d3.group(D.filters || [], (f) => f.field); const el = $('flist'); el.innerHTML = '';
+    [...byField.entries()].sort((a, b) => d3.sum(b[1], (f) => f.n) - d3.sum(a[1], (f) => f.n)).forEach(([field, fs]) => {
+      const h = document.createElement('h4'); h.textContent = field; el.appendChild(h);
+      fs.forEach((f) => { const l = document.createElement('label'); l.innerHTML = `<input type="checkbox" ${offSub.has(f.sf) ? '' : 'checked'}> <span>${esc(f.sf)}</span> <span class="num">${f.n}</span>`;
+        l.querySelector('input').addEventListener('change', (ev) => { if (ev.target.checked) offSub.delete(f.sf); else offSub.add(f.sf); refilter(); }); el.appendChild(l); });
+    });
+    updateFsum();
+  }
+  document.querySelectorAll('input.tech').forEach((c) => c.addEventListener('change', () => { offTech = new Set([...document.querySelectorAll('input.tech')].filter((x) => !x.checked).map((x) => x.value)); refilter(); }));
+  $('filtersBtn').addEventListener('click', () => { const open = $('filters').hidden; $('filters').hidden = !open; $('filtersBtn').setAttribute('aria-expanded', String(open)); });
+  $('fClose').addEventListener('click', () => { $('filters').hidden = true; $('filtersBtn').setAttribute('aria-expanded', 'false'); });
+  $('fAll').addEventListener('click', () => { offSub = new Set(); buildFilterList(); refilter(); });
+  $('fNone').addEventListener('click', () => { offSub = new Set((D.filters || []).map((f) => f.sf)); buildFilterList(); refilter(); });
+  $('fDefaults').addEventListener('click', () => { offSub = new Set((D.filters || []).filter((f) => !f.on).map((f) => f.sf)); buildFilterList(); refilter(); });
+  $('reset').addEventListener('click', () => { $('q').value = ''; select(null); if (view === 'labs') svgL.transition().duration(400).call(zoom.transform, d3.zoomIdentity); else if (view === 'geo') { geoZoom = 1; geoPan = [0, 0]; rot = [-20, -20]; buildGeo(); } else graph.scrollTop = 0; });
+  window.addEventListener('resize', () => { if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (sim) { const W = graph.clientWidth, H = graph.clientHeight; sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart(); } });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  function retheme() { buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (selected) drawString(selected); }
+  mq.addEventListener('change', retheme); new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
+
+</body>
+</html>
