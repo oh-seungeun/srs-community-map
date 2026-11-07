@@ -87,6 +87,35 @@
   #flist label .num { color: var(--muted); }
   .tip { position: absolute; pointer-events: none; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
     padding: 6px 9px; font-size: 12px; max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; z-index: 5; }
+  /* Search view: query bar, facet chips, hits-per-year bars, ranked papers */
+  #search { position: absolute; inset: 0; overflow-y: auto; font-size: 13.5px; line-height: 1.45;
+    padding: 12px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+  #search[hidden] { display: none; }
+  .sbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #sq { width: min(560px, 100%); font-size: 14px; padding: 7px 11px; }
+  .facet { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .facet b { color: var(--fg); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+  .facet input[type=number] { width: 64px; font: 500 12.5px var(--font-mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .chip .num { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip.on .num { color: #fff; }
+  #sbars { display: block; margin-top: 10px; max-width: 100%; height: auto; }
+  #sbars rect { cursor: pointer; }
+  .sres { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 8px; max-width: 900px; }
+  .sres li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding: 6px; border-radius: 6px; border: 1px solid transparent; }
+  .sres li:hover { border-color: var(--line); background: var(--panel); }
+  .sres li.on { border-color: var(--accent); }
+  .sres .y { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  .sres .t { font-weight: 700; cursor: pointer; }
+  .sres .t:hover { color: var(--accent); }
+  .sres .meta .chip { padding: 0 7px; }
+  .sres .snip { font-size: 12.5px; color: var(--muted); margin-top: 2px; max-width: 80ch; }
+  mark { background: var(--accent-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
+  .ask { margin-top: 8px; }
+  #aq { width: min(640px, 100%); font-size: 14px; padding: 7px 11px; }
+  #aout { max-width: 900px; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 13.5px; }
+  #aout p { margin: 6px 0; }
+  .chip.ref { padding: 0 6px; font-family: var(--font-mono); font-size: 11px; vertical-align: 1px; }
   @media (max-width: 760px) {
     main { grid-template-columns: 1fr; grid-template-rows: 1fr minmax(0, 42%); }
     aside { border-left: 0; border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); }
@@ -105,6 +134,7 @@
     <button type="button" data-view="subjects" aria-pressed="false">Subjects</button>
     <button type="button" data-view="geo" aria-pressed="false">Geo</button>
     <button type="button" data-view="lineage" aria-pressed="false">Lineage</button>
+    <button type="button" data-view="search" aria-pressed="false">Search</button>
   </div>
   <div class="ctl">
     <label for="q">PI <input id="q" type="search" placeholder="name" list="names" autocomplete="off"></label>
@@ -134,6 +164,20 @@
     <svg id="svgSubj" role="img" aria-label="Papers arranged by subject and year" hidden></svg>
     <svg id="svgGeo" role="img" aria-label="PIs placed on a world map by institution" hidden></svg>
     <svg id="svgLin" role="img" aria-label="Academic lineage tree of SRS PIs" hidden></svg>
+    <div id="search" hidden>
+      <div class="sbar">
+        <input id="sq" type="search" placeholder="topic words, e.g. lipid droplet cancer — &quot;quotes&quot; for a phrase" autocomplete="off" aria-label="topic search">
+        <button type="button" id="sgo">Search</button><button type="button" id="sclear">clear</button>
+        <span class="note">ranks every paper by BM25 over title and abstract; the Filters panel and the conference-abstract box still apply</span>
+      </div>
+      <div class="sbar ask" id="askRow" hidden>
+        <input id="aq" type="search" placeholder="ask the map, e.g. which labs image lipid droplets in live animals, and how?" autocomplete="off" aria-label="question for Claude">
+        <button type="button" id="ago">Ask Claude</button><button type="button" id="astop" hidden>stop</button>
+        <span class="note">Claude reads the 40 best-matching papers (after your filters) and answers from them only, with [n] citations · uses your Claude account</span>
+      </div>
+      <div id="aout" hidden></div>
+      <div id="sbody"></div>
+    </div>
     <div id="status">loading data…</div>
     <div class="tip" id="tip"></div>
     <div id="filters" hidden>
@@ -153,12 +197,13 @@
       <span><i style="background:var(--bead)"></i>paper as last author</span>
       <span><i style="background:var(--bead-co)"></i>paper as co-author</span>
       <span>line width = shared papers · drag nodes · wheel/pinch to zoom</span>
+      <span id="legendHit" hidden><i style="background:var(--panel);border:2px solid var(--halo);box-sizing:border-box"></i>matches the topic search</span>
     </div>
   </div>
   <aside id="panel">
     <h2>How to read this map</h2>
     <p class="meta">Each node is a principal investigator with at least three last-author papers (slider: down to one) in the SRS / coherent-Raman microscopy literature since 2007, from OpenAlex. Conference abstracts and data stubs are hidden unless you tick the box, and the Filters panel hides unrelated fields such as structural vibration or pollution by default. Lines connect PIs who share papers. Nearby nodes collaborate often.</p>
-    <p class="meta">Click a PI to unwind their papers into a chronological string of beads around the node. Click a bead for the paper. Switch to <b>Subjects</b> for papers as beads on a shelf per subject, <b>Geo</b> for the world map, and <b>Lineage</b> for who trained in whose lab.</p>
+    <p class="meta">Click a PI to unwind their papers into a chronological string of beads around the node. Click a bead for the paper. Switch to <b>Subjects</b> for papers as beads on a shelf per subject, <b>Geo</b> for the world map, <b>Lineage</b> for who trained in whose lab, and <b>Search</b> to rank papers and labs by topic.</p>
   </aside>
 </main>
 
@@ -178,6 +223,7 @@
   let offSub = new Set();                     // OpenAlex subfields currently filtered out
   let offTech = new Set();                    // techniques filtered out: srs | cars | other (coherent Raman / vibrational imaging without naming either)
   let P = [], S = new Map(), E = [];          // filtered papers, per-PI stats {la, n}, co-authorship edges — all recomputed client-side
+  let hitsBy = new Map();                     // PI id -> {n, s, la} for the current topic search (gold ring in the Labs and Geo views)
   const okP = (p) => (incConf || !p.conf) && !offSub.has(p.sf || 'Unknown') && (p.tech || ['other']).some((t) => !offTech.has(t));
   function recompute() {
     P = D.papers.filter(okP); S = new Map(D.nodes.map((n) => [n.id, { la: 0, n: 0 }])); papersOf = new Map(); const ec = new Map();
@@ -201,7 +247,7 @@
     (d.subjects.applications || []).forEach((t) => { subj.set(t.id, t); subjGroup.set(t.id, 'appl'); });
     sub.textContent = `${d.nodes.length} PIs · ${d.papers.length} papers · ${d.n_works_total} works searched · built ${d.built}`;
     const dl = $('names'); d.nodes.forEach((n) => { const o = document.createElement('option'); o.value = n.name; dl.appendChild(o); });
-    buildLabs(); setView(['subjects', 'geo', 'lineage'].includes((location.hash || '#labs').slice(1)) ? location.hash.slice(1) : 'labs', false);
+    buildLabs(); const h0 = parseHash(); if (h0.q) { $('sq').value = h0.q; runSearch(h0.q, false); } setView(h0.v, false);
     connectStore();
   }).catch((e) => { status.textContent = 'Could not load the data: ' + e.message; });
 
@@ -231,16 +277,29 @@
   }
 
   // ---------- views
+  const VIEWS = ['labs', 'subjects', 'geo', 'lineage', 'search'];
+  function parseHash() {   // #view or #search?q=words
+    const [v, qs] = (location.hash || '#labs').slice(1).split('?'); const q = qs ? (new URLSearchParams(qs).get('q') || '') : '';
+    return { v: VIEWS.includes(v) ? v : 'labs', q };
+  }
+  function helpPanel() {
+    panel.innerHTML = view === 'search'
+      ? '<h2>Topic search</h2><p class="meta">Type a few words and press Enter. Papers are ranked by BM25 over title and abstract (crude stemming, so <i>lipids</i> finds <i>lipid</i>). The chips narrow the hits by subject, technique, lead-PI role and year; the bars count hits per year (click one to pin that year). Click a lab chip to keep only that lab\'s papers. The same labs get a gold ring in the Labs and Geo views, so switch views to see where a topic lives. Click a title for the paper. <b>Ask Claude</b> (when the map is open in claude.ai) retrieves the 40 best matches and answers from them with [n] citations; click a number for the paper.</p>'
+      : '<h2>How to read this map</h2><p class="meta">Click a PI to unwind their papers into a chronological string of beads. Click a bead for the paper. In the Subjects view, pick a PI to highlight their beads on every shelf.</p>';
+  }
   function setView(v, push = true) {
-    view = v; if (push && location.hash !== '#' + v) location.hash = v;
+    view = v; const target = v === 'search' && sq ? 'search?q=' + encodeURIComponent(sq) : v;
+    if (push && location.hash !== '#' + target) location.hash = target;
     document.querySelectorAll('.seg button[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
     // SVG elements have no `hidden` property, so toggle the attribute (the page CSS hides [hidden])
     const showSvg = (id, on) => { const el = $(id); if (on) el.removeAttribute('hidden'); else el.setAttribute('hidden', ''); };
-    showSvg('svgLabs', v === 'labs'); showSvg('svgSubj', v === 'subjects'); showSvg('svgGeo', v === 'geo'); showSvg('svgLin', v === 'lineage'); $('legendLabs').hidden = v === 'subjects';
+    showSvg('svgLabs', v === 'labs'); showSvg('svgSubj', v === 'subjects'); showSvg('svgGeo', v === 'geo'); showSvg('svgLin', v === 'lineage'); $('search').hidden = v !== 'search'; $('legendLabs').hidden = v === 'subjects' || v === 'search';
     $('labsCtl').hidden = v !== 'labs' && v !== 'lineage'; $('subjCtl').hidden = v !== 'subjects'; $('geoCtl').hidden = v !== 'geo'; graph.classList.toggle('subjects', v === 'subjects' || v === 'lineage');
-    if (v === 'subjects') buildSubjects(); else if (v === 'geo') buildGeo(); else if (v === 'lineage') buildLineage(); else { applyEmphasis(); if (selected) drawString(selected); }
+    if (v === 'subjects') buildSubjects(); else if (v === 'geo') buildGeo(); else if (v === 'lineage') buildLineage();
+    else if (v === 'search') { renderSearch(); if (!selected && !selectedPaper) helpPanel(); if (!sq) $('sq').focus(); }
+    else { applyEmphasis(); if (selected) drawString(selected); }
   }
-  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (['labs', 'subjects', 'geo', 'lineage'].includes(v) && v !== view) setView(v, false); });
+  window.addEventListener('hashchange', () => { const { v, q } = parseHash(); if (q && q !== sq) { $('sq').value = q; runSearch(q, false); } if (v !== view) setView(v, false); });
   document.querySelectorAll('.seg button[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 
   // ======================================================= LABS VIEW
@@ -251,9 +310,9 @@
   const ROLE = { developer: 'developer: most last-author papers are method papers', applier: 'applier: uses SRS and names it', user: 'user: SRS results without naming the technique' };
   function styleNodes(sel) {   // role is encoded in the node's fill and outline
     sel.attr('fill', (n) => n.role === 'developer' ? css('--node') : css('--panel'))
-      .attr('stroke', (n) => selected && n.id === selected.id ? css('--halo') : (n.role === 'developer' ? css('--panel') : css('--node')))
-      .attr('stroke-width', (n) => selected && n.id === selected.id ? 3 : (n.role === 'developer' ? 1.5 : 2))
-      .attr('stroke-dasharray', (n) => n.role === 'user' && !(selected && n.id === selected.id) ? '3 2' : null);
+      .attr('stroke', (n) => (selected && n.id === selected.id) || hitsBy.has(n.id) ? css('--halo') : (n.role === 'developer' ? css('--panel') : css('--node')))
+      .attr('stroke-width', (n) => (selected && n.id === selected.id) || hitsBy.has(n.id) ? 3 : (n.role === 'developer' ? 1.5 : 2))
+      .attr('stroke-dasharray', (n) => n.role === 'user' && !(selected && n.id === selected.id) && !hitsBy.has(n.id) ? '3 2' : null);
   }
   const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => g.attr('transform', e.transform));
   svgL.call(zoom).on('dblclick.zoom', null);
@@ -288,20 +347,24 @@
     circ.exit().remove();
     circ.enter().append('circle').attr('tabindex', 0).merge(gNode.selectAll('circle'))
       .attr('r', rNode).style('cursor', 'pointer').call(styleNodes)
-      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${laOf(n)} last-author · ${nOf(n)} papers · ${n.y0}–${n.y1}<br><span style="color:var(--muted)">${esc(n.role || '')}</span>`))
+      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${laOf(n)} last-author · ${nOf(n)} papers · ${n.y0}–${n.y1}<br><span style="color:var(--muted)">${esc(n.role || '')}</span>${hitsBy.has(n.id) ? `<br><b>${hitsBy.get(n.id).n}</b> papers match the search` : ''}`))
       .on('mousemove', moveTip).on('mouseleave', hideTip)
       .on('click', (ev, n) => { ev.stopPropagation(); select(n); })
       .on('keydown', (ev, n) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(n); } })
       .call(d3.drag().on('start', (ev, n) => { if (!ev.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
         .on('drag', (ev, n) => { n.fx = ev.x; n.fy = ev.y; })
         .on('end', (ev, n) => { if (!ev.active) sim.alphaTarget(0); n.fx = null; n.fy = null; }));
-    const lab = gLabel.selectAll('text').data(nodes.filter((n) => laOf(n) >= 10), (n) => n.id);
+    drawLabels();
+    svgL.on('click', () => { if (selected) select(null); });
+    if (selected && !keep.has(selected.id)) select(null); else applyEmphasis();
+  }
+  function drawLabels() {   // names for the big labs, plus every lab that matches a topic search (when few enough to read)
+    const lab = gLabel.selectAll('text').data(nodes.filter((n) => laOf(n) >= 10 || (hitsBy.size <= 60 && hitsBy.has(n.id))), (n) => n.id);
     lab.exit().remove();
     lab.enter().append('text').merge(gLabel.selectAll('text')).text((n) => n.name)
       .attr('font-size', 11).attr('font-family', css('--font-ui')).attr('font-weight', 700).attr('fill', css('--fg'))
-      .attr('paint-order', 'stroke').attr('stroke', css('--bg')).attr('stroke-width', 3).attr('pointer-events', 'none');
-    svgL.on('click', () => { if (selected) select(null); });
-    if (selected && !keep.has(selected.id)) select(null); else applyEmphasis();
+      .attr('paint-order', 'stroke').attr('stroke', css('--bg')).attr('stroke-width', 3).attr('pointer-events', 'none')
+      .attr('x', (n) => (n.x || 0) + rNode(n) + 3).attr('y', (n) => (n.y || 0) + 4);
   }
   function tick() {
     gEdge.selectAll('line').attr('x1', (e) => e.source.x).attr('y1', (e) => e.source.y).attr('x2', (e) => e.target.x).attr('y2', (e) => e.target.y);
@@ -339,7 +402,8 @@
     if (view === 'subjects') { buildSubjects(); }
     if (view === 'geo') { buildGeo(); }
     if (view === 'lineage') { buildLineage(); }
-    if (!n) { panel.innerHTML = '<h2>How to read this map</h2><p class="meta">Click a PI to unwind their papers into a chronological string of beads. Click a bead for the paper. In the Subjects view, pick a PI to highlight their beads on every shelf.</p>'; return; }
+    if (view === 'search') { renderSearch(); }
+    if (!n) { helpPanel(); return; }
     if (view === 'labs') {
       drawString(n);
       const t = d3.zoomTransform(svgL.node()), W = graph.clientWidth, H = graph.clientHeight;
@@ -348,11 +412,12 @@
     showPI(n);
   }
   function applyEmphasis() {
-    const nb = selected ? (neighbors.get(selected.id) || new Map()) : null;
-    gNode.selectAll('circle').attr('opacity', (n) => !selected ? 1 : n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.25).call(styleNodes);
-    gEdge.selectAll('line').attr('stroke-opacity', (e) => !selected ? 0.7 : (e.source.id === selected.id || e.target.id === selected.id) ? 0.95 : 0.12)
+    const nb = selected ? (neighbors.get(selected.id) || new Map()) : null, hl = !selected && hitsBy.size ? hitsBy : null;   // a search dims the labs it does not touch
+    if (nodes.length) drawLabels();
+    gNode.selectAll('circle').attr('opacity', (n) => selected ? (n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.25) : hl ? (hl.has(n.id) ? 1 : 0.15) : 1).call(styleNodes);
+    gEdge.selectAll('line').attr('stroke-opacity', (e) => selected ? ((e.source.id === selected.id || e.target.id === selected.id) ? 0.95 : 0.12) : hl ? (hl.has(e.source.id) && hl.has(e.target.id) ? 0.7 : 0.08) : 0.7)
       .attr('stroke', (e) => selected && (e.source.id === selected.id || e.target.id === selected.id) ? css('--accent') : css('--edge'));
-    gLabel.selectAll('text').attr('opacity', (n) => !selected ? 1 : n.id === selected.id || nb.has(n.id) ? 1 : 0.3);
+    gLabel.selectAll('text').attr('opacity', (n) => selected ? (n.id === selected.id || nb.has(n.id) ? 1 : 0.3) : hl ? (hl.has(n.id) ? 1 : 0.25) : 1);
   }
 
   // ======================================================= SUBJECTS VIEW: one shelf per subject, beads placed by year
@@ -451,11 +516,11 @@
     }
     const dots = g.append('g').selectAll('circle').data(placed.filter((n) => pos.has(n.id)), (n) => n.id).enter().append('circle')
       .attr('cx', (n) => pos.get(n.id)[0]).attr('cy', (n) => pos.get(n.id)[1]).attr('r', (n) => 0.75 * rNode(n)).style('cursor', 'pointer').call(styleNodes)
-      .attr('opacity', (n) => !selected ? 0.95 : n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.3)
-      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${esc([n.city, n.cc].filter(Boolean).join(', '))} · ${laOf(n)} last-author · ${esc(n.role || '')}`))
+      .attr('opacity', (n) => selected ? (n.id === selected.id ? 1 : nb.has(n.id) ? 0.95 : 0.3) : hitsBy.size ? (hitsBy.has(n.id) ? 1 : 0.2) : 0.95)
+      .on('mouseenter', (ev, n) => showTip(ev, `<b>${esc(n.name)}</b><br>${esc(n.inst)}<br>${esc([n.city, n.cc].filter(Boolean).join(', '))} · ${laOf(n)} last-author · ${esc(n.role || '')}${hitsBy.has(n.id) ? `<br><b>${hitsBy.get(n.id).n}</b> papers match the search` : ''}`))
       .on('mousemove', moveTip).on('mouseleave', hideTip)
       .on('click', (ev, n) => { ev.stopPropagation(); select(n); });
-    g.append('g').selectAll('text').data(placed.filter((n) => pos.has(n.id) && (laOf(n) >= 15 || (selected && (n.id === selected.id || nb.has(n.id)))))).enter().append('text')
+    g.append('g').selectAll('text').data(placed.filter((n) => pos.has(n.id) && (laOf(n) >= 15 || (selected && (n.id === selected.id || nb.has(n.id))) || (!selected && hitsBy.size <= 60 && hitsBy.has(n.id))))).enter().append('text')
       .text((n) => n.name).attr('x', (n) => pos.get(n.id)[0] + 0.75 * rNode(n) + 2).attr('y', (n) => pos.get(n.id)[1] + 3)
       .attr('font-size', 10).attr('font-family', css('--font-ui')).attr('font-weight', 700).attr('fill', css('--fg')).attr('paint-order', 'stroke').attr('stroke', css('--panel')).attr('stroke-width', 3).attr('pointer-events', 'none');
     // drag: rotate the globe or pan the flat map; wheel: zoom
@@ -530,6 +595,169 @@
     svgN.on('click', () => { if (selected) select(null); });
   }
 
+  // ======================================================= SEARCH VIEW: BM25 over title + abstract, facet chips, hits per year, lab ranking
+  const STOP = new Set('a an the of and or in on for to with by from at as is are was were be been we our this that these those using use used via into than its it their there which can may also here not but both between within without each per such has have had show shown showed'.split(' '));
+  function stem(w) {   // crude suffix stripping: lipids/lipid, imaging/images/image, stimulated/stimulation, tissues/tissue
+    if (w.length <= 4) return w;
+    w = w.replace(/ations?$/, 'at').replace(/(ss|x|z|ch|sh)es$/, '$1').replace(/ies$/, 'y').replace(/s$/, '').replace(/(ing|ed)$/, '');
+    return w.length > 4 ? w.replace(/e$/, '') : w;
+  }
+  const tok = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter((t) => t.length > 1 && !STOP.has(t)).map(stem);
+  let idx = null;                              // built on the first search: paperId -> {tf, len}, df per term, average length (title terms count twice)
+  function buildIndex() {
+    idx = { docs: new Map(), df: new Map(), avg: 1 }; let tot = 0;
+    D.papers.forEach((p) => {
+      const tf = new Map(); tok(p.t).forEach((w) => tf.set(w, (tf.get(w) || 0) + 2)); tok(p.a).forEach((w) => tf.set(w, (tf.get(w) || 0) + 1));
+      let len = 0; tf.forEach((f, w) => { len += f; idx.df.set(w, (idx.df.get(w) || 0) + 1); }); tot += len; idx.docs.set(p.id, { tf, len });
+    });
+    idx.avg = tot / Math.max(1, D.papers.length);
+  }
+  function bm25(q) {
+    if (!idx) buildIndex();
+    const terms = [...new Set(tok(q))], phrases = [...q.matchAll(/"([^"]+)"/g)].map((m) => m[1].toLowerCase().trim()).filter(Boolean);
+    if (!terms.length) return { terms, hits: [] };
+    const N = D.papers.length, k1 = 1.2, b = 0.75, hits = [];
+    D.papers.forEach((p) => {
+      const d = idx.docs.get(p.id); let s = 0, m = 0;
+      terms.forEach((w) => { const f = d.tf.get(w); if (!f) return; m++; const n = idx.df.get(w); s += Math.log(1 + (N - n + 0.5) / (n + 0.5)) * f * (k1 + 1) / (f + k1 * (1 - b + b * d.len / idx.avg)); });
+      if (!m) return;
+      if (phrases.length) { const txt = (p.t + ' ' + (p.a || '')).toLowerCase(); if (!phrases.every((ph) => txt.includes(ph))) return; s *= 1.5; }
+      hits.push({ p, s, m });
+    });
+    hits.sort((u, v) => v.s - u.s || v.m - u.m || v.p.c - u.p.c);
+    return { terms, hits };
+  }
+  let sq = '', sTerms = new Set(), sHits = [], sList = [], sShow = 60;
+  const sF = { subj: new Set(), tech: new Set(), role: new Set(), y0: null, y1: null };   // facet filters on top of the global ones
+  const sPass = (h, skip) => okP(h.p)
+    && (skip === 'subj' || !sF.subj.size || sF.subj.has(pSubj(h.p)) || pSec(h.p).some((x) => sF.subj.has(x)))
+    && (skip === 'tech' || !sF.tech.size || (h.p.tech || ['other']).some((t) => sF.tech.has(t)))
+    && (skip === 'role' || !sF.role.size || (h.p.lead >= 0 && sF.role.has((byId.get(h.p.lead) || {}).role || 'developer')))
+    && (skip === 'year' || ((sF.y0 === null || h.p.y >= sF.y0) && (sF.y1 === null || h.p.y <= sF.y1)));
+  function searchApply() {   // hits that pass the filters; hitsBy feeds the lab ranking and the gold rings; sList is what the list shows (one lab when selected)
+    hitsBy = new Map();
+    const all = sHits.filter((h) => sPass(h));
+    all.forEach((h) => h.p.pis.forEach((id) => { const r = hitsBy.get(id) || { n: 0, s: 0, la: 0 }; r.n++; r.s += h.s; if (h.p.lead === id) r.la++; hitsBy.set(id, r); }));
+    sList = selected ? all.filter((h) => h.p.pis.includes(selected.id)) : all;
+    $('legendHit').hidden = !hitsBy.size;
+    return all;
+  }
+  function runSearch(q, push = true) {
+    sq = q.trim(); sShow = 60;
+    const r = sq ? bm25(sq) : { terms: [], hits: [] }; sTerms = new Set(r.terms); sHits = r.hits;
+    if (push) history.replaceState(null, '', sq ? '#search?q=' + encodeURIComponent(sq) : '#search');
+    searchApply(); if (view === 'search') renderSearch(); applyEmphasis(); if (view === 'geo') buildGeo();
+  }
+  function clearSearch() { $('sq').value = ''; sF.subj.clear(); sF.tech.clear(); sF.role.clear(); sF.y0 = sF.y1 = null; runSearch(''); }
+  const hl = (s) => esc(s).replace(/[A-Za-z0-9]+/g, (w) => sTerms.has(stem(w.toLowerCase())) ? `<mark>${w}</mark>` : w);
+  function snippet(p) {   // ~260 characters of the abstract around the first matching word
+    const a = p.a || ''; if (!a) return '<i>no abstract</i>';
+    let at = -1, pos = 0; for (const w of a.split(/(\s+)/)) { if (/\S/.test(w) && tok(w).some((t) => sTerms.has(t))) { at = pos; break; } pos += w.length; }
+    const start = at < 0 ? 0 : Math.max(0, at - 90), end = Math.min(a.length, start + 260);
+    return (start ? '… ' : '') + hl(a.slice(start, end)) + (end < a.length ? ' …' : '');
+  }
+  function renderSearch() {
+    if (!D) return;
+    const all = searchApply(), body = $('sbody'), box = $('search'), top = box.scrollTop;
+    if (!sq) {
+      body.innerHTML = `<p class="meta" style="margin-top:14px">Try: ${['lipid droplet', 'cholesterol crystal', '"deuterium" metabolic', 'tumor margin histology', 'alkyne tag', 'brain myelin', 'drug distribution skin'].map((q) => `<span class="chip" data-q="${esc(q)}">${esc(q)}</span>`).join(' ')}</p>`;
+      body.querySelectorAll('[data-q]').forEach((c) => c.addEventListener('click', () => { $('sq').value = c.dataset.q; runSearch(c.dataset.q); }));
+      return;
+    }
+    const facet = (key, keyOf) => { const m = new Map(); sHits.filter((h) => sPass(h, key)).forEach((h) => keyOf(h.p).forEach((k) => m.set(k, (m.get(k) || 0) + 1))); return m; };
+    const fs = facet('subj', (p) => [...new Set([pSubj(p), ...pSec(p)])].filter(Boolean)), ft = facet('tech', (p) => p.tech || ['other']), fr = facet('role', (p) => p.lead >= 0 ? [(byId.get(p.lead) || {}).role || 'developer'] : []);
+    const chip = (f, k, label, n, cls = '') => `<span class="chip ${cls} ${sF[f].has(k) ? 'on' : ''}" data-f="${f}" data-k="${esc(k)}">${esc(label)} <span class="num">${n}</span></span>`;
+    const subjChips = [...fs.entries()].sort((u, v) => v[1] - u[1]).map(([k, n]) => chip('subj', k, sName(k), n, subjGroup.get(k) || '')).join('');
+    const techChips = ['srs', 'cars', 'other'].filter((k) => ft.has(k)).map((k) => chip('tech', k, { srs: 'SRS', cars: 'CARS', other: 'neither named' }[k], ft.get(k))).join('');
+    const roleChips = ['developer', 'applier', 'user'].filter((k) => fr.has(k)).map((k) => chip('role', k, k, fr.get(k))).join('');
+    // hits per year (all filters applied), one bar per year of the corpus
+    const yrs = d3.extent(D.papers, (p) => p.y), byY = d3.rollup(all, (v) => v.length, (h) => h.p.y), W = Math.max(320, Math.min(900, box.clientWidth - 34)), maxY = d3.max(byY.values()) || 1;
+    const nY = yrs[1] - yrs[0] + 1, bw = (W - 10) / nY, mono = css('--font-mono'), muted = css('--muted');
+    const bars = d3.range(yrs[0], yrs[1] + 1).map((y, i) => {
+      const n = byY.get(y) || 0, h = 50 * n / maxY, x0 = (5 + i * bw).toFixed(1), xc = (5 + i * bw + bw / 2).toFixed(1), on = sF.y0 !== null && y >= sF.y0 && (sF.y1 === null || y <= sF.y1);
+      return `<rect data-y="${y}" x="${x0}" y="${(56 - h).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${h.toFixed(1)}" fill="${on ? css('--halo') : css('--accent')}" opacity="${n ? 1 : 0}"><title>${y}: ${n} paper${n === 1 ? '' : 's'}</title></rect>`
+        + (y % 2 === 0 ? `<text x="${xc}" y="70" text-anchor="middle" font-size="10" font-family="${mono}" fill="${muted}">${y}</text>` : '')
+        + (n ? `<text x="${xc}" y="${(52 - h).toFixed(1)}" text-anchor="middle" font-size="9" font-family="${mono}" fill="${muted}">${n}</text>` : '');
+    }).join('');
+    const labs = [...hitsBy.entries()].map(([id, r]) => ({ node: byId.get(id), k: r.n, s: r.s, la: r.la })).filter((x) => x.node).sort((u, v) => v.k - u.k || v.s - u.s).slice(0, 24);
+    const labChips = labs.map((x) => `<span class="chip ${selected && selected.id === x.node.id ? 'on' : ''}" data-id="${x.node.id}" title="${esc(x.node.inst)} · ${x.la} as last author">${esc(x.node.name)} <span class="num">${x.k}</span></span>`).join('');
+    const list = sList.slice(0, sShow);
+    body.innerHTML = `
+      <div class="facet"><b>${all.length} paper${all.length === 1 ? '' : 's'}</b> · ${hitsBy.size} labs · ${sTerms.size} search term${sTerms.size === 1 ? '' : 's'}${selected ? ` · <span class="chip on" data-id="${selected.id}">only ${esc(selected.name)} ×</span>` : ''}</div>
+      ${subjChips ? `<div class="facet"><b>Subject</b>${subjChips}</div>` : ''}
+      <div class="facet"><b>Technique</b>${techChips}<span style="width:8px"></span><b>Lead-PI role</b>${roleChips}<span style="width:8px"></span><b>Year</b><input type="number" id="sy0" min="${yrs[0]}" max="${yrs[1]}" placeholder="${yrs[0]}" value="${sF.y0 === null ? '' : sF.y0}" aria-label="from year"> – <input type="number" id="sy1" min="${yrs[0]}" max="${yrs[1]}" placeholder="${yrs[1]}" value="${sF.y1 === null ? '' : sF.y1}" aria-label="to year"></div>
+      <svg id="sbars" width="${W}" height="76" viewBox="0 0 ${W} 76" role="img" aria-label="matching papers per year">${bars}</svg>
+      ${labs.length ? `<div class="facet"><b>Labs</b>${labChips}${hitsBy.size > labs.length ? `<span class="note">+${hitsBy.size - labs.length} more</span>` : ''}</div>` : ''}
+      <ol class="sres">${list.map((h) => { const lead = h.p.lead >= 0 ? byId.get(h.p.lead) : null, ps = pSubj(h.p);
+        return `<li data-pid="${h.p.id}" class="${selectedPaper && selectedPaper.id === h.p.id ? 'on' : ''}"><span class="y">${h.p.y}</span><div><span class="t" tabindex="0">${hl(h.p.t)}</span>
+          <div class="meta">${lead ? `<span class="chip" data-id="${lead.id}">${esc(lead.name)}</span> · ` : ''}${esc(h.p.j)} · <span class="num">${h.p.c}</span> cit.${ps ? ` · <span class="chip ${subjGroup.get(ps) || ''} ${sF.subj.has(ps) ? 'on' : ''}" data-f="subj" data-k="${esc(ps)}">${esc(sName(ps))}</span>` : ''}${h.p.conf ? ' · abstract/stub' : ''}</div>
+          <div class="snip">${snippet(h.p)}</div></div></li>`; }).join('')}</ol>
+      ${sList.length > sShow ? `<p><button type="button" id="smore">show ${Math.min(60, sList.length - sShow)} more of ${sList.length - sShow}</button></p>` : (sList.length ? '' : '<p class="meta">No paper matches with these filters.</p>')}`;
+    box.scrollTop = top;
+    const rerender = () => { renderSearch(); applyEmphasis(); if (view === 'geo') buildGeo(); };
+    body.querySelectorAll('[data-f]').forEach((c) => c.addEventListener('click', () => { const set = sF[c.dataset.f], k = c.dataset.k; if (set.has(k)) set.delete(k); else set.add(k); rerender(); }));
+    body.querySelectorAll('.chip[data-id]').forEach((c) => c.addEventListener('click', () => { const m = byId.get(+c.dataset.id); if (!m) return; if (selected && selected.id === m.id) select(null); else select(m); }));
+    const open = (el) => { const li = el.closest('li'), h = sList.find((x) => x.p.id === li.dataset.pid); if (!h) return;
+      body.querySelectorAll('.sres li.on').forEach((x) => x.classList.remove('on')); li.classList.add('on');
+      showPaper(h.p, selected && h.p.pis.includes(selected.id) ? selected : (h.p.lead >= 0 ? byId.get(h.p.lead) : byId.get(h.p.pis[0]))); };
+    body.querySelectorAll('.sres .t').forEach((t) => { t.addEventListener('click', () => open(t)); t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') open(t); }); });
+    body.querySelectorAll('#sbars rect').forEach((r) => r.addEventListener('click', () => { const y = +r.dataset.y; if (sF.y0 === y && sF.y1 === y) sF.y0 = sF.y1 = null; else { sF.y0 = y; sF.y1 = y; } rerender(); }));
+    ['sy0', 'sy1'].forEach((id, i) => $(id).addEventListener('change', (e) => { sF[i ? 'y1' : 'y0'] = e.target.value === '' ? null : +e.target.value; rerender(); }));
+    const more = $('smore'); if (more) more.addEventListener('click', () => { sShow += 60; renderSearch(); });
+  }
+  $('sq').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch($('sq').value); } });
+  $('sq').addEventListener('search', () => { if (!$('sq').value) clearSearch(); });   // the native clear button
+  $('sgo').addEventListener('click', () => runSearch($('sq').value));
+  $('sclear').addEventListener('click', clearSearch);
+
+  // ---------- ask the map: BM25 retrieval -> the viewer's Claude (artifact `sample` capability); answers shared through db asks/<key>
+  let sampleFn = null, askCtl = null, askCtx = [];
+  (async () => { try { if (window.claude && window.claude.use) { sampleFn = await window.claude.use('sample'); if (sampleFn) $('askRow').hidden = false; } } catch (e) { /* no Claude in this view */ } })();
+  const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(16); };
+  const leadOf = (p) => (p.lead >= 0 ? byId.get(p.lead) : null) || byId.get(p.pis[0]) || null;
+  const leadName = (p) => { const n = leadOf(p); return n ? n.name : (p.au[p.au.length - 1] || '?'); };
+  function askPrompt(q, ctx) {
+    const lines = ctx.map((h, i) => { const n = leadOf(h.p); return `[${i + 1}] ${h.p.y} · ${h.p.t} · lab: ${n ? `${n.name} (${n.inst})` : leadName(h.p)} · ${h.p.j}${h.p.conf ? ' (conference abstract)' : ''}\n${(h.p.a || '(no abstract)').slice(0, 900)}`; });
+    return `You answer questions about the stimulated Raman scattering (SRS) and coherent Raman microscopy literature using ONLY the numbered papers below (OpenAlex title, abstract, year, lead lab). Rules: answer in the language of the question; be concise (under 250 words), in short paragraphs or bullets; cite papers inline as [n] right after each claim; name the labs when they matter; if the papers do not answer the question, say so plainly instead of guessing; never invent papers or details beyond the abstracts. Plain text with optional **bold**; no headings, no tables.\n\nQuestion: ${q}\n\nPapers:\n${lines.join('\n\n')}`;
+  }
+  function renderAnswer(text, state) {   // [n] citations become chips that open the paper; the cited papers are listed underneath
+    const cited = new Set();
+    const body = esc(text).replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (m, s) => s.split(/\s*,\s*/).map((k) => { const i = +k, h = askCtx[i - 1]; if (!h) return `[${k}]`; cited.add(i); return `<span class="chip ref" data-pid="${h.p.id}" title="${esc(h.p.t)}">${i}</span>`; }).join(''))
+      .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^\s*[-*•]\s+/gm, '• ').split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+    const src = [...cited].sort((a, b) => a - b).map((i) => { const h = askCtx[i - 1]; return `<span class="chip ref" data-pid="${h.p.id}" title="${esc(h.p.t)}">${i} · ${h.p.y} · ${esc(leadName(h.p))}</span>`; }).join('');
+    const out = $('aout'); out.hidden = false;
+    out.innerHTML = `<div class="meta">${state}</div>${body}${src ? `<div class="facet"><b>Cited</b>${src}</div>` : ''}`;
+    out.querySelectorAll('.ref').forEach((c) => c.addEventListener('click', () => { const h = askCtx.find((x) => x.p.id === c.dataset.pid); if (h) showPaper(h.p, leadOf(h.p)); }));
+    return out;
+  }
+  async function ask(force = false) {
+    const q = $('aq').value.trim(); if (!q || !sampleFn || askCtl) return;
+    if (q !== sq) { $('sq').value = q; runSearch(q); }   // the hit list below shows what Claude will read
+    askCtx = sList.slice(0, 40);
+    const out = $('aout'); out.hidden = false;
+    if (!askCtx.length) { out.innerHTML = '<p class="meta">No paper in the map matches that question with the current filters, so there is nothing to answer from.</p>'; return; }
+    const who = selected ? ` · only ${esc(selected.name)}’s papers` : '', key = 'asks/' + hash(q.toLowerCase() + '|' + askCtx.map((h) => h.p.id).join(','));
+    if (db && !force) {   // an answer somebody already got for the same question over the same papers
+      try { const d = await db.doc(key).get(); if (d.exists) { const a = d.data() || {}; renderAnswer(String(a.a || ''), `answer saved ${esc(String(a.at || '').slice(0, 10))} from ${askCtx.length} papers${who} · <span class="chip" id="aagain">ask again</span>`); const b = $('aagain'); if (b) b.addEventListener('click', () => ask(true)); return; } }
+      catch (e) { /* no store: ask */ }
+    }
+    askCtl = new AbortController(); $('ago').disabled = true; $('astop').hidden = false;
+    out.innerHTML = `<p class="meta">Thinking over ${askCtx.length} papers${who}…</p>`;
+    try {
+      const r = await sampleFn(askPrompt(q, askCtx), { signal: askCtl.signal, cache: force ? { gcTime: 300000, refresh: true } : true, onText: ({ text }) => renderAnswer(text, `writing… from ${askCtx.length} papers${who}`) });
+      renderAnswer(r.text, `answered from ${askCtx.length} papers${who}${r.truncated ? ' · cut short, ask something narrower' : ''}`);
+      if (db && canWrite !== false) db.doc(key).set({ q, a: r.text, ids: askCtx.map((h) => h.p.id), at: new Date().toISOString(), by: userId || '' }).catch(() => {});
+    } catch (e) {
+      const code = e && e.code, partial = e && e.text ? e.text : '';
+      const msg = { cancelled: 'stopped', not_granted: 'Claude is not allowed for this page (permission declined)', sampling_disabled: 'Claude is not available on this account', rate_limited: 'too many requests right now; try again in a minute', refused: 'Claude declined to answer this question', prompt_too_large: 'too much text; narrow the filters', empty_completion: 'no answer came back; try rephrasing' }[code] || 'could not reach Claude; try again';
+      if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled'].includes(code)) { $('askRow').hidden = true; sampleFn = null; }
+      if (code === 'refused' || !partial) out.innerHTML = `<p class="meta">${msg}.</p>`; else renderAnswer(partial, msg);
+    } finally { $('ago').disabled = false; $('astop').hidden = true; askCtl = null; }
+  }
+  $('ago').addEventListener('click', () => ask());
+  $('aq').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+  $('astop').addEventListener('click', () => { if (askCtl) askCtl.abort(); });
+
   // ======================================================= PANEL
   function showPI(n) {
     const ps = (papersOf.get(n.id) || []).filter(okP).slice().reverse();
@@ -598,7 +826,7 @@
   $('minw').addEventListener('input', (e) => { minW = +e.target.value; $('minwv').textContent = minW; buildLabs(); });
   $('minla').addEventListener('input', (e) => { minLA = +e.target.value; $('minlav').textContent = minLA; buildLabs(); });
   $('leadOnly').addEventListener('change', (e) => { leadOnly = e.target.checked; buildSubjects(); });
-  function refilter() { recompute(); buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (selected) { drawString(selected); showPI(selected); } updateFsum(); }
+  function refilter() { recompute(); searchApply(); buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (view === 'search') renderSearch(); else if (selected) { drawString(selected); showPI(selected); } updateFsum(); }
   $('incConf').addEventListener('change', (e) => { incConf = e.target.checked; refilter(); });
   // --- field filter panel: OpenAlex subfields grouped by field, with paper counts
   function updateFsum() { const off = (D.filters || []).filter((f) => offSub.has(f.sf)); $('fsum').textContent = `${P.length} of ${D.papers.length} papers shown` + (off.length ? ` · ${off.length} subfields off` : '') + (offTech.size ? ` · ${[...offTech].join(', ')} off` : ''); }
@@ -617,10 +845,10 @@
   $('fAll').addEventListener('click', () => { offSub = new Set(); buildFilterList(); refilter(); });
   $('fNone').addEventListener('click', () => { offSub = new Set((D.filters || []).map((f) => f.sf)); buildFilterList(); refilter(); });
   $('fDefaults').addEventListener('click', () => { offSub = new Set((D.filters || []).filter((f) => !f.on).map((f) => f.sf)); buildFilterList(); refilter(); });
-  $('reset').addEventListener('click', () => { $('q').value = ''; select(null); if (view === 'labs') svgL.transition().duration(400).call(zoom.transform, d3.zoomIdentity); else if (view === 'geo') { geoZoom = 1; geoPan = [0, 0]; rot = [-20, -20]; buildGeo(); } else if (view === 'lineage') { buildLineage(); graph.scrollTop = 0; } else graph.scrollTop = 0; });
-  window.addEventListener('resize', () => { if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (sim) { const W = graph.clientWidth, H = graph.clientHeight; sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart(); } });
+  $('reset').addEventListener('click', () => { $('q').value = ''; select(null); if (view === 'search') clearSearch(); else if (view === 'labs') svgL.transition().duration(400).call(zoom.transform, d3.zoomIdentity); else if (view === 'geo') { geoZoom = 1; geoPan = [0, 0]; rot = [-20, -20]; buildGeo(); } else if (view === 'lineage') { buildLineage(); graph.scrollTop = 0; } else graph.scrollTop = 0; });
+  window.addEventListener('resize', () => { if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (view === 'search') renderSearch(); else if (sim) { const W = graph.clientWidth, H = graph.clientHeight; sim.force('center', d3.forceCenter(W / 2, H / 2)).alpha(0.3).restart(); } });
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  function retheme() { buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (selected) drawString(selected); }
+  function retheme() { buildLabs(); if (view === 'subjects') buildSubjects(); else if (view === 'geo') buildGeo(); else if (view === 'lineage') buildLineage(); else if (view === 'search') renderSearch(); else if (selected) drawString(selected); }
   mq.addEventListener('change', retheme); new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 </script>
